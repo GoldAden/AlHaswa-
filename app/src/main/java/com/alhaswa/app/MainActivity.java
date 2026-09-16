@@ -10,6 +10,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Space;
+
 public class MainActivity extends Activity {
 
     int dark = Color.rgb(18, 35, 48);
