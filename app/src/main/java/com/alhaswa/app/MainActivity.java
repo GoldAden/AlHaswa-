@@ -3,6 +3,7 @@ package com.alhaswa.app;
 import android.app.Activity;
 import android.os.Bundle;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -22,41 +23,41 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // الشاشة الرئيسية
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(24, 35, 24, 24);
+        root.setPadding(20, 20, 20, 20);
         root.setBackgroundColor(light);
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         // العنوان
         TextView title = new TextView(this);
         title.setText("الحسوة ماجلان");
-        title.setTextSize(30);
+        title.setTextSize(28);
         title.setTextColor(dark);
         title.setGravity(Gravity.CENTER);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTypeface(null, Typeface.BOLD);
+        title.setIncludeFontPadding(true);
 
         root.addView(title, new LinearLayout.LayoutParams(
-                -1, 60
+                -1, 75
         ));
 
         // الوصف
         TextView subtitle = new TextView(this);
         subtitle.setText("ملاحتك واستكشافك بدون إنترنت");
-        subtitle.setTextSize(16);
+        subtitle.setTextSize(15);
         subtitle.setTextColor(Color.DKGRAY);
         subtitle.setGravity(Gravity.CENTER);
+        subtitle.setIncludeFontPadding(true);
 
         root.addView(subtitle, new LinearLayout.LayoutParams(
-                -1, 50
+                -1, 55
         ));
 
-        // مساحة
-        Space spacer = new Space(this);
-        root.addView(spacer, new LinearLayout.LayoutParams(
-                1, 25
+        Space space1 = new Space(this);
+        root.addView(space1, new LinearLayout.LayoutParams(
+                1, 15
         ));
 
         // الصف الأول
@@ -71,12 +72,13 @@ public class MainActivity extends Activity {
         row1.addView(map, cardParams());
         row1.addView(tide, cardParams());
 
-        root.addView(row1);
+        root.addView(row1, new LinearLayout.LayoutParams(
+                -1, 0, 1
+        ));
 
-        // مسافة
         Space space2 = new Space(this);
         root.addView(space2, new LinearLayout.LayoutParams(
-                1, 18
+                1, 12
         ));
 
         // الصف الثاني
@@ -91,9 +93,11 @@ public class MainActivity extends Activity {
         row2.addView(moon, cardParams());
         row2.addView(compass, cardParams());
 
-        root.addView(row2);
+        root.addView(row2, new LinearLayout.LayoutParams(
+                -1, 0, 1
+        ));
 
-        // أحداث الأزرار
+        // الأزرار
         map.setOnClickListener(v ->
                 Toast.makeText(this, "الخريطة", Toast.LENGTH_SHORT).show()
         );
@@ -110,17 +114,17 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, "البوصلة", Toast.LENGTH_SHORT).show()
         );
 
-        // أسفل الشاشة
         Space bottomSpace = new Space(this);
         root.addView(bottomSpace, new LinearLayout.LayoutParams(
-                1, 0, 1
+                1, 10
         ));
 
         TextView footer = new TextView(this);
         footer.setText("الحسوة ماجلان • إصدار 1.0");
-        footer.setTextSize(13);
+        footer.setTextSize(12);
         footer.setTextColor(Color.GRAY);
         footer.setGravity(Gravity.CENTER);
+        footer.setIncludeFontPadding(true);
 
         root.addView(footer, new LinearLayout.LayoutParams(
                 -1, 40
@@ -133,11 +137,14 @@ public class MainActivity extends Activity {
 
         TextView card = new TextView(this);
 
-        card.setText(icon + "\n\n" + text);
+        card.setText(icon + "\n" + text);
         card.setTextSize(19);
         card.setTextColor(dark);
         card.setGravity(Gravity.CENTER);
-        card.setTypeface(null, android.graphics.Typeface.BOLD);
+        card.setTypeface(null, Typeface.BOLD);
+
+        // مهم للعربية حتى لا ينقص الحرف من الأعلى أو الأسفل
+        card.setIncludeFontPadding(true);
 
         GradientDrawable background = new GradientDrawable();
         background.setColor(white);
@@ -145,8 +152,8 @@ public class MainActivity extends Activity {
         background.setStroke(2, Color.rgb(225, 232, 236));
 
         card.setBackground(background);
-        card.setElevation(7);
-        card.setPadding(10, 15, 10, 15);
+        card.setElevation(6);
+        card.setPadding(10, 10, 10, 10);
 
         return card;
     }
@@ -156,11 +163,11 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(
                         0,
-                        190,
+                        -1,
                         1
                 );
 
-        params.setMargins(8, 0, 8, 0);
+        params.setMargins(7, 0, 7, 0);
 
         return params;
     }
