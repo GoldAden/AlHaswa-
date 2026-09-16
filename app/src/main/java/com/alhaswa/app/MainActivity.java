@@ -159,7 +159,7 @@ public class MainActivity extends Activity {
         bottom.setGravity(Gravity.CENTER);
 
         TextView status = new TextView(this);
-        status.setText("● التطبيق صمم ليعمل بدون إنترنت");
+        status.setText("التطبيق صمم ليعمل بدون إنترنت");
         status.setTextSize(14);
         status.setTextColor(Color.rgb(25, 120, 95));
         status.setTypeface(null, Typeface.BOLD);
@@ -167,14 +167,23 @@ public class MainActivity extends Activity {
         status.setIncludeFontPadding(true);
 
         bottom.addView(status);
+TextView credit = new TextView(this);
+credit.setText("تم تصميم هذا التطبيق من قبل أصيل صادق");
+credit.setTextSize(12);
+credit.setTextColor(Color.rgb(100, 115, 125));
+credit.setGravity(Gravity.CENTER);
+credit.setPadding(0, 4, 0, 2);
+credit.setIncludeFontPadding(true);
 
-        TextView version = new TextView(this);
-        version.setText("الإصدار 1.0");
-        version.setTextSize(12);
-        version.setTextColor(Color.rgb(120, 135, 145));
-        version.setGravity(Gravity.CENTER);
-        version.setPadding(0, 6, 0, 5);
-        version.setIncludeFontPadding(true);
+bottom.addView(credit);
+
+TextView version = new TextView(this);
+version.setText("الإصدار 1.0");
+version.setTextSize(12);
+version.setTextColor(Color.rgb(120, 135, 145));
+version.setGravity(Gravity.CENTER);
+version.setPadding(0, 6, 0, 5);
+version.setIncludeFontPadding(true);
 
         bottom.addView(version);
 
