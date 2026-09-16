@@ -8,194 +8,211 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
-    // ألوان الواجهة
-    int navy = Color.rgb(8, 38, 58);
-    int blue = Color.rgb(12, 104, 145);
-    int cyan = Color.rgb(33, 177, 201);
-    int white = Color.WHITE;
-    int textDark = Color.rgb(20, 45, 60);
-    int gray = Color.rgb(100, 120, 130);
+    private int dark = Color.rgb(18, 48, 65);
+    private int white = Color.WHITE;
+    private int background = Color.rgb(244, 248, 250);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // الخلفية الرئيسية
+        // =========================
+        // ScrollView
+        // =========================
+
+        ScrollView scrollView = new ScrollView(this);
+
+        scrollView.setFillViewport(true);
+        scrollView.setBackgroundColor(background);
+
+        // =========================
+        // الحاوية الرئيسية
+        // =========================
+
         LinearLayout root = new LinearLayout(this);
+
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(18, 20, 18, 25);
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        root.setBackgroundColor(Color.rgb(241, 247, 249));
-        root.setPadding(18, 18, 18, 18);
+
+        scrollView.addView(root);
 
         // =========================
         // الرأس
         // =========================
 
         LinearLayout header = new LinearLayout(this);
+
         header.setOrientation(LinearLayout.VERTICAL);
         header.setGravity(Gravity.CENTER);
-        header.setPadding(15, 18, 15, 18);
+        header.setPadding(20, 22, 20, 22);
 
-        GradientDrawable headerBg = new GradientDrawable(
+        GradientDrawable headerBackground = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 new int[] {
-                        Color.rgb(5, 54, 82),
-                        Color.rgb(10, 121, 151)
+                        Color.rgb(7, 55, 78),
+                        Color.rgb(9, 125, 151)
                 }
         );
 
-        headerBg.setCornerRadius(35);
-        header.setBackground(headerBg);
+        headerBackground.setCornerRadius(32);
+        header.setBackground(headerBackground);
         header.setElevation(8);
 
         TextView title = new TextView(this);
+
         title.setText("الحسوة ماجلان");
-        title.setTextColor(white);
         title.setTextSize(26);
+        title.setTextColor(white);
         title.setTypeface(null, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         title.setIncludeFontPadding(true);
 
-        header.addView(title, new LinearLayout.LayoutParams(
-                -1, 55
-        ));
+        header.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("دليلك البحري والاستكشافي");
-        subtitle.setTextColor(Color.rgb(220, 245, 250));
+
+        subtitle.setText("دليلك للملاحة واستكشاف البر والبحر");
         subtitle.setTextSize(14);
+        subtitle.setTextColor(Color.rgb(225, 245, 248));
         subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 8, 0, 0);
         subtitle.setIncludeFontPadding(true);
 
-        header.addView(subtitle, new LinearLayout.LayoutParams(
-                -1, 38
-        ));
+        header.addView(subtitle);
 
-        root.addView(header, new LinearLayout.LayoutParams(
-                -1, 125
-        ));
+        root.addView(header);
 
         // =========================
-        // عنوان القسم
+        // المسافة
         // =========================
 
-        TextView sectionTitle = new TextView(this);
-        sectionTitle.setText("ماذا تريد أن تستكشف؟");
-        sectionTitle.setTextColor(textDark);
-        sectionTitle.setTextSize(19);
-        sectionTitle.setTypeface(null, Typeface.BOLD);
-        sectionTitle.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        sectionTitle.setPadding(5, 8, 5, 0);
-        sectionTitle.setIncludeFontPadding(true);
-
-        root.addView(sectionTitle, new LinearLayout.LayoutParams(
-                -1, 55
-        ));
+        addSpace(root, 18);
 
         // =========================
-        // الصف الأول
+        // عنوان
         // =========================
 
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
-        row1.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView section = new TextView(this);
+
+        section.setText("أدوات الملاحة");
+        section.setTextSize(20);
+        section.setTextColor(dark);
+        section.setTypeface(null, Typeface.BOLD);
+        section.setGravity(Gravity.RIGHT);
+        section.setIncludeFontPadding(true);
+        section.setPadding(4, 5, 4, 12);
+
+        root.addView(section);
+
+        // =========================
+        // الخريطة
+        // =========================
 
         TextView map = createCard(
-                "◉",
+                "🗺️",
                 "الخريطة",
-                "موقعك والملاحة",
-                Color.rgb(14, 113, 153)
+                "استعرض الخريطة وتابع موقعك"
         );
+
+        root.addView(map);
+
+        addSpace(root, 12);
+
+        // =========================
+        // المد والجزر
+        // =========================
 
         TextView tide = createCard(
-                "≈",
+                "🌊",
                 "المد والجزر",
-                "حالة البحر",
-                Color.rgb(0, 145, 160)
+                "تابع حالة المد والجزر ومواعيدها"
         );
 
-        row1.addView(map, cardParams());
-        row1.addView(tide, cardParams());
+        root.addView(tide);
 
-        root.addView(row1, new LinearLayout.LayoutParams(
-                -1, 0, 1
-        ));
+        addSpace(root, 12);
 
         // =========================
-        // مسافة
+        // القمر
         // =========================
-
-        View gap = new View(this);
-        root.addView(gap, new LinearLayout.LayoutParams(
-                1, 12
-        ));
-
-        // =========================
-        // الصف الثاني
-        // =========================
-
-        LinearLayout row2 = new LinearLayout(this);
-        row2.setOrientation(LinearLayout.HORIZONTAL);
-        row2.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         TextView moon = createCard(
-                "☾",
+                "🌙",
                 "مراحل القمر",
-                "معلومات القمر",
-                Color.rgb(77, 83, 145)
+                "اعرف مرحلة القمر الحالية ومراحلة القادمة"
         );
+
+        root.addView(moon);
+
+        addSpace(root, 12);
+
+        // =========================
+        // البوصلة
+        // =========================
 
         TextView compass = createCard(
-                "✥",
+                "🧭",
                 "البوصلة",
-                "اتجاهك الحالي",
-                Color.rgb(20, 125, 105)
+                "اعرف اتجاهك الحالي بسهولة"
         );
 
-        row2.addView(moon, cardParams());
-        row2.addView(compass, cardParams());
+        root.addView(compass);
 
-        root.addView(row2, new LinearLayout.LayoutParams(
-                -1, 0, 1
-        ));
+        addSpace(root, 20);
 
         // =========================
-        // معلومات أسفل الشاشة
+        // حالة التطبيق
         // =========================
 
-        LinearLayout bottom = new LinearLayout(this);
-        bottom.setGravity(Gravity.CENTER);
-        bottom.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout status = new LinearLayout(this);
 
-        TextView offline = new TextView(this);
-        offline.setText("●  يعمل بدون إنترنت");
-        offline.setTextColor(Color.rgb(25, 125, 105));
-        offline.setTextSize(13);
-        offline.setGravity(Gravity.CENTER);
-        offline.setTypeface(null, Typeface.BOLD);
+        status.setOrientation(LinearLayout.VERTICAL);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(15, 15, 15, 15);
 
-        bottom.addView(offline, new LinearLayout.LayoutParams(
-                -1, 30
-        ));
+        GradientDrawable statusBackground = new GradientDrawable();
 
-        TextView version = new TextView(this);
-        version.setText("الحسوة ماجلان  •  الإصدار 1.0");
-        version.setTextColor(gray);
-        version.setTextSize(11);
-        version.setGravity(Gravity.CENTER);
+        statusBackground.setColor(Color.rgb(232, 246, 242));
+        statusBackground.setCornerRadius(24);
 
-        bottom.addView(version, new LinearLayout.LayoutParams(
-                -1, 25
-        ));
+        status.setBackground(statusBackground);
 
-        root.addView(bottom, new LinearLayout.LayoutParams(
-                -1, 65
-        ));
+        TextView statusText = new TextView(this);
+
+        statusText.setText("●  التطبيق يعمل بدون إنترنت");
+        statusText.setTextSize(14);
+        statusText.setTextColor(Color.rgb(25, 120, 95));
+        statusText.setTypeface(null, Typeface.BOLD);
+        statusText.setGravity(Gravity.CENTER);
+        statusText.setIncludeFontPadding(true);
+
+        status.addView(statusText);
+
+        root.addView(status);
+
+        addSpace(root, 18);
+
+        // =========================
+        // أسفل الشاشة
+        // =========================
+
+        TextView footer = new TextView(this);
+
+        footer.setText("الحسوة ماجلان\nالإصدار 1.0");
+        footer.setTextSize(12);
+        footer.setTextColor(Color.rgb(120, 135, 145));
+        footer.setGravity(Gravity.CENTER);
+        footer.setIncludeFontPadding(true);
+        footer.setPadding(0, 5, 0, 10);
+
+        root.addView(footer);
 
         // =========================
         // الضغط على البطاقات
@@ -233,15 +250,17 @@ public class MainActivity extends Activity {
                 ).show()
         );
 
-        setContentView(root);
+        setContentView(scrollView);
     }
 
-    // إنشاء بطاقة
+    // ==================================================
+    // إنشاء بطاقة مرنة
+    // ==================================================
+
     private TextView createCard(
             String icon,
             String title,
-            String description,
-            int iconColor) {
+            String description) {
 
         TextView card = new TextView(this);
 
@@ -251,36 +270,64 @@ public class MainActivity extends Activity {
                 description
         );
 
-        card.setTextSize(16);
-        card.setTextColor(textDark);
+        card.setTextSize(17);
+        card.setTextColor(dark);
+
         card.setGravity(Gravity.CENTER);
         card.setTypeface(null, Typeface.BOLD);
+
+        /*
+         * مهم جدًا:
+         * لا يوجد ارتفاع ثابت هنا.
+         * البطاقة تأخذ الارتفاع الذي تحتاجه.
+         */
+        card.setPadding(20, 22, 20, 22);
+
         card.setIncludeFontPadding(true);
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(white);
-        bg.setCornerRadius(30);
-        bg.setStroke(2, Color.rgb(220, 232, 236));
+        GradientDrawable background = new GradientDrawable();
 
-        card.setBackground(bg);
-        card.setElevation(6);
-        card.setPadding(8, 12, 8, 12);
+        background.setColor(white);
+        background.setCornerRadius(28);
+        background.setStroke(
+                2,
+                Color.rgb(222, 232, 236)
+        );
+
+        card.setBackground(background);
+
+        card.setElevation(5);
+
+        /*
+         * العرض كامل والارتفاع تلقائي
+         */
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        -1,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        card.setLayoutParams(params);
 
         return card;
     }
 
-    // حجم البطاقات
-    private LinearLayout.LayoutParams cardParams() {
+    // ==================================================
+    // مسافة
+    // ==================================================
 
-        LinearLayout.LayoutParams params =
+    private void addSpace(
+            LinearLayout layout,
+            int height) {
+
+        View space = new View(this);
+
+        layout.addView(
+                space,
                 new LinearLayout.LayoutParams(
-                        0,
-                        -1,
-                        1
-                );
-
-        params.setMargins(6, 0, 6, 0);
-
-        return params;
+                        1,
+                        height
+                )
+        );
     }
 }
