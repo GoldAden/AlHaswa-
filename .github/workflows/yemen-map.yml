@@ -1,0 +1,71 @@
+name: Build Yemen Offline Vector Map
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 0'
+
+jobs:
+  build-yemen-map:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download Osmosis 0.47.4
+        run: |
+          wget -q \
+            https://github.com/openstreetmap/osmosis/releases/download/0.47.4/osmosis-0.47.4.zip \
+            -O osmosis.zip
+
+          unzip -q osmosis.zip -d osmosis
+          chmod +x osmosis/bin/osmosis
+          echo "$(pwd)/osmosis/bin" >> "$GITHUB_PATH"
+
+      - name: Install Mapsforge Map-Writer 0.30.0
+        run: |
+          mkdir -p ~/.openstreetmap/osmosis/plugins
+
+          wget -q \
+            https://github.com/mapsforge/mapsforge/releases/download/0.30.0/mapsforge-map-writer-0.30.0-jar-with-dependencies.jar \
+            -O ~/.openstreetmap/osmosis/plugins/mapsforge-map-writer-0.30.0-jar-with-dependencies.jar
+
+      - name: Download Yemen OSM data
+        run: |
+          wget -q \
+            https://download.geofabrik.de/asia/yemen-latest.osm.pbf \
+            -O yemen-latest.osm.pbf
+
+          ls -lh yemen-latest.osm.pbf
+
+      - name: Convert Yemen OSM to Mapsforge Vector Map
+        env:
+          JAVACMD_OPTIONS: "-Xmx3G"
+        run: |
+          osmosis \
+            --rb file=yemen-latest.osm.pbf \
+            --mw file=Yemen.map type=ram
+
+      - name: Verify Yemen.map
+        run: |
+          if [ ! -s Yemen.map ]; then
+            echo "ERROR: Yemen.map was not created."
+            exit 1
+          fi
+
+          echo "Yemen.map created successfully:"
+          ls -lh Yemen.map
+
+      - name: Upload Yemen Vector Map
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yemen-Vector-Map
+          path: Yemen.map
+          retention-days: 30
