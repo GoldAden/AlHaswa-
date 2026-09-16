@@ -1,21 +1,65 @@
-name: Build AlHaswa APK
+name: Fix and Build AlHaswa
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  fix-and-build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Fix nested project structure
+        run: |
+          set -e
+
+          echo "Current structure:"
+          find . -maxdepth 7 -type f | sort
+
+          # إذا كانت ملفات المشروع داخل app/app/app/app
+          if [ -d "app/app/app/app" ]; then
+            echo "Found nested project."
+
+            mkdir -p /tmp/alhaswa
+
+            cp -R app/app/app/app/. /tmp/alhaswa/
+
+            rm -rf app/app
+
+            mkdir -p app
+
+            cp -R /tmp/alhaswa/. app/
+          fi
+
+          echo "Structure after fix:"
+          find app -maxdepth 7 -type f | sort
+
+      - name: Commit fixed structure
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No structural changes to commit."
+          else
+            git commit -m "Fix nested Android project structure"
+            git push
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
