@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -18,13 +17,10 @@ jobs:
         run: |
           wget -q https://github.com/openstreetmap/osmosis/releases/download/0.48.3/osmosis-0.48.3.tgz
           tar xzf osmosis-0.48.3.tgz
-          ls -R | head -n 50
-          chmod +x bin/osmosis || chmod +x osmosis-0.48.3/bin/osmosis || true
           mkdir -p ~/.openstreetmap/osmosis/plugins
           wget -q https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar -O ~/.openstreetmap/osmosis/plugins/writer.jar
-          ls -lh ~/.openstreetmap/osmosis/plugins/
 
-      - name: Create OSM + Build
+      - name: Build World.map
         run: |
           mkdir -p work
           cat > work/world.osm << 'OSM'
@@ -32,17 +28,15 @@ jobs:
           <osm version="0.6">
             <node id="1" lat="-85" lon="-180"/><node id="2" lat="-85" lon="180"/><node id="3" lat="85" lon="180"/><node id="4" lat="85" lon="-180"/>
             <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="natural" v="land"/></way>
-            <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="country"/><tag k="name" v="اليمن"/></node>
+            <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="country"/><tag k="name" v="اليمن"/><tag k="name:en" v="Yemen"/></node>
+            <node id="11" lat="24" lon="46"><tag k="place" v="country"/><tag k="name" v="السعودية"/><tag k="name:en" v="Saudi Arabia"/></node>
           </osm>
           OSM
-          cat > work/tag.xml << 'XML'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <tag-mapping><osm-tag key="natural" value="land" zoom-appear="0"/><osm-tag key="place" value="country" zoom-appear="0"/><osm-tag key="name" value="*" zoom-appear="0"/></tag-mapping>
-          XML
+          # تحميل ملف tag-mapping الرسمي من Mapsforge
+          wget -q https://raw.githubusercontent.com/mapsforge/mapsforge/master/mapsforge-map-writer/src/main/resources/tag-mapping.xml -O work/tag-mapping.xml
           OSMOSIS_BIN=$(find . -type f -name osmosis | head -n 1)
-          echo "Found: $OSMOSIS_BIN"
           chmod +x "$OSMOSIS_BIN"
-          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
+          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
           ls -lh work/World.map
 
       - name: Upload
