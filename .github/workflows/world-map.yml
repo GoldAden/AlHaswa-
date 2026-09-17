@@ -20,23 +20,29 @@ jobs:
           mkdir -p ~/.openstreetmap/osmosis/plugins
           wget -q https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar -O ~/.openstreetmap/osmosis/plugins/writer.jar
 
-      - name: Build World.map
+      - name: Build
         run: |
           mkdir -p work
           cat > work/world.osm << 'OSM'
           <?xml version='1.0' encoding='UTF-8'?>
           <osm version="0.6">
             <node id="1" lat="-85" lon="-180"/><node id="2" lat="-85" lon="180"/><node id="3" lat="85" lon="180"/><node id="4" lat="85" lon="-180"/>
-            <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="natural" v="land"/></way>
-            <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="country"/><tag k="name" v="اليمن"/><tag k="name:en" v="Yemen"/></node>
-            <node id="11" lat="24" lon="46"><tag k="place" v="country"/><tag k="name" v="السعودية"/><tag k="name:en" v="Saudi Arabia"/></node>
+            <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="natural" v="background"/></way>
+            <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="city"/><tag k="name" v="اليمن"/></node>
           </osm>
           OSM
-          # تحميل ملف tag-mapping الرسمي من Mapsforge
-          wget -q https://raw.githubusercontent.com/mapsforge/mapsforge/master/mapsforge-map-writer/src/main/resources/tag-mapping.xml -O work/tag-mapping.xml
+          cat > work/tag-mapping.xml << 'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <tag-mapping>
+            <osm-tag key="natural" value="background" zoom-appear="0"/>
+            <osm-tag key="place" value="city" zoom-appear="0"/>
+            <osm-tag key="name" value="*" zoom-appear="0"/>
+          </tag-mapping>
+          XML
           OSMOSIS_BIN=$(find . -type f -name osmosis | head -n 1)
           chmod +x "$OSMOSIS_BIN"
-          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
+          cat work/tag-mapping.xml
+          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2 --log-progress
           ls -lh work/World.map
 
       - name: Upload
