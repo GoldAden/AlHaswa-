@@ -19,8 +19,9 @@ jobs:
           tar xzf osmosis-0.48.3.tgz
           mkdir -p ~/.openstreetmap/osmosis/plugins
           wget -q https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar -O ~/.openstreetmap/osmosis/plugins/writer.jar
+          ls ~/.openstreetmap/osmosis/plugins/
 
-      - name: Build
+      - name: Build World.map
         run: |
           mkdir -p work
           cat > work/world.osm << 'OSM'
@@ -29,25 +30,15 @@ jobs:
             <node id="1" lat="-85" lon="-180"/><node id="2" lat="-85" lon="180"/><node id="3" lat="85" lon="180"/><node id="4" lat="85" lon="-180"/>
             <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="natural" v="background"/></way>
             <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="city"/><tag k="name" v="اليمن"/></node>
+            <node id="11" lat="24.0" lon="46.0"><tag k="place" v="city"/><tag k="name" v="السعودية"/></node>
           </osm>
           OSM
-          cat > work/tag-mapping.xml << 'XML'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <tag-mapping>
-            <pois>
-              <osm-tag key="place" value="city" zoom-appear="0"/>
-              <osm-tag key="name" value="*" zoom-appear="0"/>
-            </pois>
-            <ways>
-              <osm-tag key="natural" value="background" zoom-appear="0"/>
-            </ways>
-          </tag-mapping>
-          XML
           OSMOSIS_BIN=$(find . -type f -name osmosis | head -n 1)
           chmod +x "$OSMOSIS_BIN"
-          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
+          # بدون tag-conf-file - يستخدم الملف الداخلي
+          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
           ls -lh work/World.map
-          echo "SUCCESS"
+          echo "SUCCESS - GREEN"
 
       - name: Upload
         uses: actions/upload-artifact@v4
