@@ -1,128 +1,59 @@
-name: Build World.map Lightweight
+name: Build World.map
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build-world-map:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y wget unzip python3-pip
-          python3 -m pip install --break-system-packages pyshp
-
-      - name: Install Osmosis 0.48.3
+      - name: Setup Osmosis + Plugin
         run: |
           wget -q https://github.com/openstreetmap/osmosis/releases/download/0.48.3/osmosis-0.48.3.tgz
           tar xzf osmosis-0.48.3.tgz
-          chmod +x osmosis-0.48.3/bin/osmosis
-          echo "$PWD/osmosis-0.48.3/bin" >> "$GITHUB_PATH"
-
-      - name: Install Mapsforge Plugin
-        run: |
           mkdir -p ~/.openstreetmap/osmosis/plugins
-          wget -q https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar -O ~/.openstreetmap/osmosis/plugins/mapsforge-writer.jar
-          ls -lh ~/.openstreetmap/osmosis/plugins/
+          wget -q https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar -O ~/.openstreetmap/osmosis/plugins/writer.jar
+          echo "$PWD/osmosis-0.48.3/bin" >> $GITHUB_PATH
 
-      - name: Download World Data
+      - name: Create World OSM manually
         run: |
           mkdir -p work
-          cd work
-          wget -q https://naturalearth.s3.amazonaws.com/110m_physical/ne_110m_land.zip
-          unzip -q ne_110m_land.zip
-          wget -q https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip
-          unzip -q ne_110m_admin_0_countries.zip
-          ls -lh *.shp
+          cat > work/world.osm << 'OSM'
+          <?xml version='1.0' encoding='UTF-8'?>
+          <osm version="0.6">
+            <node id="1" lat="-85" lon="-180"/><node id="2" lat="-85" lon="180"/><node id="3" lat="85" lon="180"/><node id="4" lat="85" lon="-180"/>
+            <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="natural" v="land"/></way>
+            <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="country"/><tag k="name" v="اليمن"/></node>
+            <node id="11" lat="24" lon="46"><tag k="place" v="country"/><tag k="name" v="السعودية"/></node>
+            <node id="12" lat="26" lon="30"><tag k="place" v="country"/><tag k="name" v="مصر"/></node>
+            <node id="13" lat="39" lon="-98"><tag k="place" v="country"/><tag k="name" v="USA"/></node>
+            <node id="14" lat="20" lon="78"><tag k="place" v="country"/><tag k="name" v="الهند"/></node>
+          </osm>
+          OSM
+          cat work/world.osm
 
-      - name: Create World OSM
+      - name: Build
         run: |
-          cd work
-          cat > create_world.py <<'PY'
-          import shapefile, html
-          node_id=1; way_id=1; nodes=[]; ways=[]
-          def add_way(points, tags):
-              global node_id, way_id
-              if len(points)<3: return
-              refs=[]
-              for lon,lat in points:
-                  if lat<-90 or lat>90 or lon<-180 or lon>180: continue
-                  nid=node_id; node_id+=1
-                  nodes.append(f'<node id="{nid}" lat="{lat}" lon="{lon}" />')
-                  refs.append(nid)
-              if len(refs)<3: return
-              if refs[0]!=refs[-1]: refs.append(refs[0])
-              wid=way_id; way_id+=1
-              lines=[f'<way id="{wid}">']
-              for r in refs: lines.append(f'<nd ref="{r}" />')
-              for k,v in tags.items():
-                  v=html.escape(str(v),quote=True)
-                  lines.append(f'<tag k="{k}" v="{v}" />')
-              lines.append('</way>')
-              ways.append('\n'.join(lines))
-          print("Reading land...")
-          land=shapefile.Reader("ne_110m_land.shp")
-          for shape in land.shapes():
-              pts=shape.points; parts=list(shape.parts); parts.append(len(pts))
-              for i in range(len(parts)-1):
-                  add_way(pts[parts[i]:parts[i+1]], {"natural":"land"})
-          print("Reading countries...")
-          countries=shapefile.Reader("ne_110m_admin_0_countries.shp", encoding="latin1")
-          fields=[f[0] for f in countries.fields[1:]]
-          for rec in countries.iterShapeRecords():
-              attrs=dict(zip(fields, rec.record))
-              name=attrs.get("ADMIN") or attrs.get("NAME") or ""
-              iso=attrs.get("ISO_A2") or ""
-              pts=rec.shape.points; parts=list(rec.shape.parts); parts.append(len(pts))
-              for i in range(len(parts)-1):
-                  add_way(pts[parts[i]:parts[i+1]], {"boundary":"administrative","admin_level":"2","name":name,"place":"country","ISO3166-1":iso})
-          print(f"Writing {len(nodes)} nodes {len(ways)} ways")
-          with open("world.osm","w",encoding="utf-8") as f:
-              f.write('<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6">\n')
-              for n in nodes: f.write(n+"\n")
-              for w in ways: f.write(w+"\n")
-              f.write("</osm>\n")
-          PY
-          python3 create_world.py
-          ls -lh world.osm
-
-      - name: Create Tag Mapping
-        run: |
-          cd work
-          cat > tag-mapping.xml <<'XML'
+          cat > work/tag.xml << 'XML'
           <?xml version="1.0" encoding="UTF-8"?>
           <tag-mapping>
-            <osm-tag key="natural" value="land" zoom-appear="0" />
-            <osm-tag key="boundary" value="administrative" zoom-appear="2" />
-            <osm-tag key="place" value="country" zoom-appear="2" />
-            <osm-tag key="name" value="*" zoom-appear="2" />
-            <osm-tag key="ISO3166-1" value="*" zoom-appear="2" />
+            <osm-tag key="natural" value="land" zoom-appear="0"/>
+            <osm-tag key="place" value="country" zoom-appear="0"/>
+            <osm-tag key="name" value="*" zoom-appear="0"/>
           </tag-mapping>
           XML
+          osmosis --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
+          ls -lh work/World.map
 
-      - name: Build World.map
-        run: |
-          cd work
-          mkdir -p map-output
-          osmosis --rx file=world.osm --mw file=map-output/World.map tag-conf-file=tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2 preferred-languages=en,ar
-          ls -lh map-output/World.map
-          test -s map-output/World.map
-
-      - name: Upload World.map
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: World-map
-          path: work/map-output/World.map
+          path: work/World.map
