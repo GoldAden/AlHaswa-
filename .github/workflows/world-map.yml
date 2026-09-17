@@ -20,9 +20,10 @@ jobs:
           tar xzf osmosis-0.48.3.tgz
           mkdir -p ~/.openstreetmap/osmosis/plugins
           wget -q https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar -O ~/.openstreetmap/osmosis/plugins/writer.jar
-          echo "$PWD/osmosis-0.48.3/bin" >> $GITHUB_PATH
+          ls ~/.openstreetmap/osmosis/plugins/
+          ./osmosis-0.48.3/bin/osmosis --version
 
-      - name: Create World OSM manually
+      - name: Create World OSM
         run: |
           mkdir -p work
           cat > work/world.osm << 'OSM'
@@ -32,12 +33,8 @@ jobs:
             <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="natural" v="land"/></way>
             <node id="10" lat="15.3694" lon="44.1910"><tag k="place" v="country"/><tag k="name" v="اليمن"/></node>
             <node id="11" lat="24" lon="46"><tag k="place" v="country"/><tag k="name" v="السعودية"/></node>
-            <node id="12" lat="26" lon="30"><tag k="place" v="country"/><tag k="name" v="مصر"/></node>
-            <node id="13" lat="39" lon="-98"><tag k="place" v="country"/><tag k="name" v="USA"/></node>
-            <node id="14" lat="20" lon="78"><tag k="place" v="country"/><tag k="name" v="الهند"/></node>
           </osm>
           OSM
-          cat work/world.osm
 
       - name: Build
         run: |
@@ -49,7 +46,7 @@ jobs:
             <osm-tag key="name" value="*" zoom-appear="0"/>
           </tag-mapping>
           XML
-          osmosis --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
+          ./osmosis-0.48.3/bin/osmosis --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
           ls -lh work/World.map
 
       - name: Upload
