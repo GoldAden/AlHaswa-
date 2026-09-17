@@ -17,7 +17,6 @@ import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
 import org.mapsforge.map.datastore.MapDataStore;
-import org.mapsforge.map.datastore.MultiMapDataStore;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
@@ -390,25 +389,25 @@ public class MainActivity extends Activity {
     }
 
     /*
-     * نسخ ملف من assets إلى التخزين الداخلي
+     * نسخ Yemen.map من assets إلى التخزين الداخلي
      */
-    private File copyAssetToInternal(
-            String assetName
-    ) throws Exception {
+    private File getMapFile() throws Exception {
 
-        File file =
+        File mapFile =
                 new File(
                         getFilesDir(),
-                        assetName
+                        "Yemen.map"
                 );
 
-        if (!file.exists()) {
+        if (!mapFile.exists()) {
 
             InputStream input =
-                    getAssets().open(assetName);
+                    getAssets().open(
+                            "Yemen.map"
+                    );
 
             FileOutputStream output =
-                    new FileOutputStream(file);
+                    new FileOutputStream(mapFile);
 
             byte[] buffer =
                     new byte[8192];
@@ -431,55 +430,7 @@ public class MainActivity extends Activity {
             input.close();
         }
 
-        return file;
-    }
-
-    /*
-     * تحميل خريطة اليمن + خريطة العالم
-     */
-    private MapDataStore getCombinedMap()
-            throws Exception {
-
-        File yemenFile =
-                copyAssetToInternal(
-                        "Yemen.map"
-                );
-
-        File worldFile =
-                copyAssetToInternal(
-                        "world.map"
-                );
-
-        MapFile yemenMap =
-                new MapFile(yemenFile);
-
-        MapFile worldMap =
-                new MapFile(worldFile);
-
-        MultiMapDataStore multiMapDataStore =
-                new MultiMapDataStore(
-                        MultiMapDataStore.DataPolicy.RETURN_FIRST
-                );
-
-        /*
-         * خريطة اليمن
-         */
-        multiMapDataStore.addMapDataStore(
-                yemenMap,
-                true,
-                false
-        );
-
-        /*
-         * خريطة العالم
-         */
-        multiMapDataStore.addMapDataStore(
-                worldMap,
-                true,
-                false
-        );
-
-        return multiMapDataStore;
+        return mapFile;
     }
 
     private void showMap() {
@@ -542,10 +493,13 @@ public class MainActivity extends Activity {
         try {
 
             /*
-             * تحميل اليمن + العالم
+             * تحميل خريطة اليمن فقط
              */
+            File mapFile =
+                    getMapFile();
+
             MapDataStore mapDataStore =
-                    getCombinedMap();
+                    new MapFile(mapFile);
 
             int tileSize =
                     mapView
@@ -556,7 +510,7 @@ public class MainActivity extends Activity {
             TileCache tileCache =
                     AndroidUtil.createTileCache(
                             this,
-                            "world-yemen-map-cache",
+                            "yemen-map-cache",
                             tileSize,
                             2f,
                             2f
@@ -595,7 +549,7 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * البداية على اليمن
+             * مركز الخريطة على اليمن
              */
             mapView.setCenter(
                     new LatLong(
@@ -612,7 +566,7 @@ public class MainActivity extends Activity {
 
             Toast.makeText(
                     this,
-                    "تم تحميل خريطة اليمن والعالم بدون إنترنت",
+                    "تم تحميل خريطة اليمن بدون إنترنت",
                     Toast.LENGTH_SHORT
             ).show();
 
