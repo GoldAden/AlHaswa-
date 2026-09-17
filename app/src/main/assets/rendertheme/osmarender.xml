@@ -1,108 +1,371 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<rendertheme xmlns="http://mapsforge.org/renderTheme"
+
+<rendertheme
+    xmlns="http://mapsforge.org/renderTheme"
     version="6"
-    map-background="#F5F5F5">
+    map-background="#E8E3D8">
 
-    <!-- الطرق الرئيسية -->
-    <rule e="way" k="highway" v="motorway|trunk">
-        <line stroke="#E87817" stroke-width="1.2"/>
-    </rule>
+    <!-- ========================= -->
+    <!-- البحر والمياه -->
+    <!-- ========================= -->
 
-    <rule e="way" k="highway" v="primary">
-        <line stroke="#F0A000" stroke-width="1.0"/>
-    </rule>
-
-    <rule e="way" k="highway" v="secondary">
-        <line stroke="#F2C94C" stroke-width="0.8"/>
-    </rule>
-
-    <rule e="way" k="highway" v="tertiary">
-        <line stroke="#FFFFFF" stroke-width="0.7"/>
-        <line stroke="#AAAAAA" stroke-width="0.25"/>
-    </rule>
-
-    <rule e="way" k="highway" v="residential|unclassified|road">
-        <line stroke="#FFFFFF" stroke-width="0.55"/>
-        <line stroke="#B0B0B0" stroke-width="0.18"/>
-    </rule>
-
-    <rule e="way" k="highway" v="service">
-        <line stroke="#C8C8C8" stroke-width="0.25"/>
-    </rule>
-
-    <rule e="way" k="highway" v="track|path|footway">
-        <line stroke="#999999"
-              stroke-width="0.2"
-              stroke-dasharray="3,3"/>
-    </rule>
-
-    <!-- المباني -->
-    <rule e="way" k="building" v="*">
-        <area fill="#D8D0BD"/>
-        <line stroke="#B8AD98" stroke-width="0.15"/>
-    </rule>
-
-    <!-- المياه -->
     <rule e="way" k="natural" v="water">
-        <area fill="#B8DDE8"/>
+        <area fill="#9FD4E5"/>
     </rule>
 
     <rule e="way" k="water" v="*">
-        <area fill="#B8DDE8"/>
+        <area fill="#9FD4E5"/>
     </rule>
 
+    <rule e="way" k="natural" v="coastline">
+        <line
+            stroke="#6AAFC4"
+            stroke-width="0.5"/>
+    </rule>
+
+    <rule e="way" k="waterway" v="river|canal">
+        <line
+            stroke="#78BDD6"
+            stroke-width="1.2"/>
+    </rule>
+
+    <rule e="way" k="waterway" v="stream|ditch">
+        <line
+            stroke="#8BC9DC"
+            stroke-width="0.6"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- اليابسة والمناطق الطبيعية -->
+    <!-- ========================= -->
+
+    <rule e="way" k="natural" v="wood|forest">
+        <area fill="#C9D8B5"/>
+    </rule>
+
+    <rule e="way" k="landuse" v="forest">
+        <area fill="#C9D8B5"/>
+    </rule>
+
+    <rule e="way" k="natural" v="scrub">
+        <area fill="#D8DFC4"/>
+    </rule>
+
+    <rule e="way" k="natural" v="grassland">
+        <area fill="#DDE5C8"/>
+    </rule>
+
+    <rule e="way" k="landuse" v="grass">
+        <area fill="#DDE5C8"/>
+    </rule>
+
+    <rule e="way" k="natural" v="heath">
+        <area fill="#D9DFC8"/>
+    </rule>
+
+    <rule e="way" k="natural" v="sand">
+        <area fill="#E8D6A8"/>
+    </rule>
+
+    <rule e="way" k="natural" v="bare_rock">
+        <area fill="#CFC8B8"/>
+    </rule>
+
+    <rule e="way" k="natural" v="scree">
+        <area fill="#D3CCBE"/>
+    </rule>
+
+    <rule e="way" k="natural" v="rock">
+        <area fill="#CCC5B6"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- الأراضي الزراعية -->
+    <!-- ========================= -->
+
+    <rule e="way" k="landuse" v="farmland|farm">
+        <area fill="#D9E1BD"/>
+    </rule>
+
+    <rule e="way" k="landuse" v="orchard">
+        <area fill="#C8DDBB"/>
+    </rule>
+
+    <rule e="way" k="landuse" v="vineyard">
+        <area fill="#CBDDBB"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- المناطق السكنية -->
+    <!-- ========================= -->
+
+    <rule e="way" k="landuse" v="residential">
+        <area fill="#E4E0D8"/>
+    </rule>
+
+    <rule e="way" k="landuse" v="commercial">
+        <area fill="#E6DED8"/>
+    </rule>
+
+    <rule e="way" k="landuse" v="industrial">
+        <area fill="#DDD9D5"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- المباني -->
+    <!-- ========================= -->
+
+    <rule e="way" k="building" v="*">
+        <area fill="#D2C7B5"/>
+        <line
+            stroke="#B3A895"
+            stroke-width="0.18"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- الطرق الرئيسية -->
+    <!-- ========================= -->
+
+    <rule e="way" k="highway" v="motorway">
+        <line
+            stroke="#D96F32"
+            stroke-width="2.4"/>
+    </rule>
+
+    <rule e="way" k="highway" v="trunk">
+        <line
+            stroke="#E07A35"
+            stroke-width="2.0"/>
+    </rule>
+
+    <rule e="way" k="highway" v="primary">
+        <line
+            stroke="#E5A23C"
+            stroke-width="1.7"/>
+    </rule>
+
+    <rule e="way" k="highway" v="secondary">
+        <line
+            stroke="#E8BD59"
+            stroke-width="1.4"/>
+    </rule>
+
+    <rule e="way" k="highway" v="tertiary">
+        <line
+            stroke="#FFFFFF"
+            stroke-width="1.2"/>
+
+        <line
+            stroke="#AAA59C"
+            stroke-width="0.25"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- الشوارع -->
+    <!-- ========================= -->
+
+    <rule e="way" k="highway" v="residential|unclassified">
+        <line
+            stroke="#FFFFFF"
+            stroke-width="0.9"/>
+
+        <line
+            stroke="#AAA7A0"
+            stroke-width="0.18"/>
+    </rule>
+
+    <rule e="way" k="highway" v="living_street">
+        <line
+            stroke="#FFFFFF"
+            stroke-width="0.8"/>
+
+        <line
+            stroke="#AAA7A0"
+            stroke-width="0.18"/>
+    </rule>
+
+    <rule e="way" k="highway" v="service">
+        <line
+            stroke="#C2BEB6"
+            stroke-width="0.35"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- الطرق الترابية والمسارات -->
+    <!-- ========================= -->
+
+    <rule e="way" k="highway" v="track">
+        <line
+            stroke="#B19A78"
+            stroke-width="0.45"
+            stroke-dasharray="3,3"/>
+    </rule>
+
+    <rule e="way" k="highway" v="path|footway">
+        <line
+            stroke="#9E978D"
+            stroke-width="0.25"
+            stroke-dasharray="2,3"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- السكك الحديدية -->
+    <!-- ========================= -->
+
+    <rule e="way" k="railway" v="rail">
+        <line
+            stroke="#777777"
+            stroke-width="0.8"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- حدود المناطق -->
+    <!-- ========================= -->
+
+    <rule e="way" k="boundary" v="administrative">
+        <line
+            stroke="#A28C9B"
+            stroke-width="0.35"
+            stroke-dasharray="5,3"/>
+    </rule>
+
+
+    <!-- ========================= -->
     <!-- المدن -->
+    <!-- ========================= -->
+
     <rule e="node" k="place" v="city">
-        <circle radius="3" fill="#555555"/>
-        <caption k="name"
+        <circle
+            radius="3.2"
+            fill="#555555"/>
+
+        <caption
+            k="name"
             font-size="14"
             font-style="bold"
             fill="#222222"
             stroke="#FFFFFF"
-            stroke-width="2"/>
+            stroke-width="2"
+            priority="10"/>
     </rule>
 
+
+    <!-- ========================= -->
     <!-- البلدات -->
+    <!-- ========================= -->
+
     <rule e="node" k="place" v="town">
-        <circle radius="2.5" fill="#666666"/>
-        <caption k="name"
+        <circle
+            radius="2.5"
+            fill="#666666"/>
+
+        <caption
+            k="name"
             font-size="12"
             font-style="bold"
             fill="#333333"
             stroke="#FFFFFF"
             stroke-width="2"
-            zoom-min="8"/>
+            zoom-min="8"
+            priority="8"/>
     </rule>
 
+
+    <!-- ========================= -->
     <!-- القرى -->
+    <!-- ========================= -->
+
     <rule e="node" k="place" v="village">
-        <circle radius="1.8" fill="#777777"/>
-        <caption k="name"
+        <circle
+            radius="1.8"
+            fill="#777777"/>
+
+        <caption
+            k="name"
             font-size="10"
             fill="#444444"
             stroke="#FFFFFF"
             stroke-width="1.5"
-            zoom-min="10"/>
+            zoom-min="10"
+            priority="6"/>
     </rule>
 
+
+    <!-- ========================= -->
     <!-- التجمعات الصغيرة -->
+    <!-- ========================= -->
+
     <rule e="node" k="place" v="hamlet|isolated_dwelling">
-        <caption k="name"
+        <caption
+            k="name"
+            font-size="9"
+            fill="#555555"
+            stroke="#FFFFFF"
+            stroke-width="1.5"
+            zoom-min="12"
+            priority="4"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- أسماء الطرق -->
+    <!-- ========================= -->
+
+    <rule
+        e="way"
+        k="highway"
+        v="motorway|trunk|primary|secondary|tertiary"
+        zoom-min="11">
+
+        <pathText
+            k="name"
+            font-size="9"
+            fill="#555555"
+            stroke="#FFFFFF"
+            stroke-width="1.5"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- أسماء الأنهار -->
+    <!-- ========================= -->
+
+    <rule
+        e="way"
+        k="waterway"
+        v="river|canal"
+        zoom-min="10">
+
+        <pathText
+            k="name"
+            font-size="9"
+            fill="#4F91A8"
+            stroke="#FFFFFF"
+            stroke-width="1"/>
+    </rule>
+
+
+    <!-- ========================= -->
+    <!-- أسماء الأماكن -->
+    <!-- ========================= -->
+
+    <rule e="node" k="place" v="suburb|neighbourhood">
+        <caption
+            k="name"
             font-size="9"
             fill="#555555"
             stroke="#FFFFFF"
             stroke-width="1.5"
             zoom-min="12"/>
-    </rule>
-
-    <!-- أسماء الطرق -->
-    <rule e="way" k="highway" v="primary|secondary|tertiary"
-          zoom-min="12">
-        <pathText k="name"
-            font-size="9"
-            fill="#555555"
-            stroke="#FFFFFF"
-            stroke-width="1.5"/>
     </rule>
 
 </rendertheme>
