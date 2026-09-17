@@ -1,15 +1,14 @@
 package com.alhaswa.app;
 
-import android.app.Activity;
-import android.os.Bundle;
 import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.LatLong;
@@ -24,91 +23,42 @@ import org.mapsforge.map.reader.MapFile;
 import org.mapsforge.map.rendertheme.XmlRenderTheme;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
-public class MainActivity extends Activity {
-
-    private LinearLayout mainLayout;
+public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        AndroidGraphicFactory.createInstance(getApplication());
+        AndroidGraphicFactory.createInstance(
+                getApplication()
+        );
 
         showHome();
     }
 
-    private int dp(float value) {
-        return (int) (
-                value *
-                getResources()
-                        .getDisplayMetrics()
-                        .density
-                        + 0.5f
-        );
-    }
-
-    private TextView textView(
-            String text,
-            float size,
-            int color,
-            int gravity
-    ) {
-        TextView tv = new TextView(this);
-
-        tv.setText(text);
-        tv.setTextSize(size);
-        tv.setTextColor(color);
-        tv.setGravity(gravity);
-
-        return tv;
-    }
-
-    private GradientDrawable background(
-            int color,
-            float radius
-    ) {
-        GradientDrawable drawable =
-                new GradientDrawable();
-
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp(radius));
-
-        return drawable;
-    }
-
     private void showHome() {
 
-        ScrollView scrollView =
-                new ScrollView(this);
-
-        scrollView.setFillViewport(true);
-
-        mainLayout =
+        LinearLayout layout =
                 new LinearLayout(this);
 
-        mainLayout.setOrientation(
+        layout.setOrientation(
                 LinearLayout.VERTICAL
         );
 
-        mainLayout.setGravity(
+        layout.setGravity(
                 Gravity.CENTER_HORIZONTAL
         );
 
-        mainLayout.setPadding(
-                0,
-                dp(24),
-                0,
-                dp(18)
+        layout.setPadding(
+                dp(20),
+                dp(30),
+                dp(20),
+                dp(20)
         );
-
-        mainLayout.setBackgroundColor(
-                Color.rgb(245, 247, 250)
-        );
-
-        scrollView.addView(mainLayout);
 
         TextView title =
                 textView(
@@ -118,12 +68,7 @@ public class MainActivity extends Activity {
                         Gravity.CENTER
                 );
 
-        title.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
-
-        mainLayout.addView(
+        layout.addView(
                 title,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
@@ -135,294 +80,201 @@ public class MainActivity extends Activity {
                 textView(
                         "دليلك للملاحة واستكشاف البر والبحر",
                         16,
-                        Color.rgb(90, 90, 90),
+                        Color.DKGRAY,
                         Gravity.CENTER
                 );
 
-        subtitle.setPadding(
-                dp(10),
-                dp(7),
-                dp(10),
-                dp(18)
-        );
-
-        mainLayout.addView(subtitle);
-
-        TextView section =
-                textView(
-                        "أدوات الملاحة",
-                        21,
-                        Color.rgb(30, 30, 30),
-                        Gravity.RIGHT
+        LinearLayout.LayoutParams subtitleParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        section.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
-
-        section.setPadding(
-                dp(18),
+        subtitleParams.setMargins(
+                0,
                 dp(8),
-                dp(18),
-                dp(8)
+                0,
+                dp(25)
         );
 
-        mainLayout.addView(
-                section,
+        layout.addView(
+                subtitle,
+                subtitleParams
+        );
+
+        TextView mapButton =
+                button(
+                        "🗺️  الخريطة",
+                        20
+                );
+
+        TextView tideButton =
+                button(
+                        "🌊  المد والجزر",
+                        20
+                );
+
+        TextView moonButton =
+                button(
+                        "🌙  مراحل القمر",
+                        20
+                );
+
+        TextView compassButton =
+                button(
+                        "🧭  البوصلة",
+                        20
+                );
+
+        layout.addView(
+                mapButton,
+                buttonParams()
+        );
+
+        layout.addView(
+                tideButton,
+                buttonParams()
+        );
+
+        layout.addView(
+                moonButton,
+                buttonParams()
+        );
+
+        layout.addView(
+                compassButton,
+                buttonParams()
+        );
+
+        mapButton.setOnClickListener(
+                v -> showMap()
+        );
+
+        tideButton.setOnClickListener(
+                v -> showMessage(
+                        "قسم المد والجزر"
+                )
+        );
+
+        moonButton.setOnClickListener(
+                v -> showMessage(
+                        "اعرف مرحلة القمر الحالية ومراحلة القادمة"
+                )
+        );
+
+        compassButton.setOnClickListener(
+                v -> showMessage(
+                        "قسم البوصلة"
+                )
+        );
+
+        TextView spacer =
+                new TextView(this);
+
+        layout.addView(
+                spacer,
+                new LinearLayout.LayoutParams(
+                        1,
+                        0,
+                        1
+                )
+        );
+
+        TextView offline =
+                textView(
+                        "● التطبيق صمم ليعمل بدون إنترنت",
+                        14,
+                        Color.DKGRAY,
+                        Gravity.CENTER
+                );
+
+        layout.addView(
+                offline,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 )
         );
-
-        addNavigationCard(
-                "🗺️",
-                "الخريطة",
-                "استعرض الخريطة وتابع موقعك"
-        );
-
-        addNavigationCard(
-                "🌊",
-                "المد والجزر",
-                "تابع حالة المد والجزر ومواعيدها"
-        );
-
-        addNavigationCard(
-                "🌙",
-                "مراحل القمر",
-                "اعرف مرحلة القمر الحالية ومراحلة القادمة"
-        );
-
-        addNavigationCard(
-                "🧭",
-                "البوصلة",
-                "اعرف اتجاهك الحالي بسهولة"
-        );
-
-        TextView offline =
-                textView(
-                        "التطبيق صمم ليعمل بدون إنترنت",
-                        14,
-                        Color.rgb(80, 80, 80),
-                        Gravity.CENTER
-                );
-
-        offline.setPadding(
-                dp(10),
-                dp(22),
-                dp(10),
-                dp(5)
-        );
-
-        mainLayout.addView(offline);
 
         TextView author =
                 textView(
                         "تم تصميم هذا التطبيق من قبل أصيل صادق",
                         14,
-                        Color.rgb(80, 80, 80),
+                        Color.GRAY,
                         Gravity.CENTER
                 );
 
-        mainLayout.addView(author);
-
-        TextView version =
-                textView(
-                        "الإصدار 1.0",
-                        13,
-                        Color.rgb(120, 120, 120),
-                        Gravity.CENTER
-                );
-
-        version.setPadding(
-                0,
-                dp(5),
-                0,
-                0
-        );
-
-        mainLayout.addView(version);
-
-        setContentView(scrollView);
-    }
-
-    private void addNavigationCard(
-            String icon,
-            String title,
-            String description
-    ) {
-
-        LinearLayout card =
-                new LinearLayout(this);
-
-        card.setOrientation(
-                LinearLayout.HORIZONTAL
-        );
-
-        card.setGravity(
-                Gravity.CENTER_VERTICAL
-        );
-
-        card.setPadding(
-                dp(18),
-                dp(16),
-                dp(18),
-                dp(16)
-        );
-
-        card.setBackground(
-                background(
-                        Color.WHITE,
-                        18
-                )
-        );
-
-        LinearLayout.LayoutParams params =
+        LinearLayout.LayoutParams authorParams =
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        params.setMargins(
-                dp(16),
-                dp(7),
-                dp(16),
-                dp(7)
-        );
-
-        card.setLayoutParams(params);
-
-        TextView iconView =
-                textView(
-                        icon,
-                        30,
-                        Color.DKGRAY,
-                        Gravity.CENTER
-                );
-
-        card.addView(
-                iconView,
-                new LinearLayout.LayoutParams(
-                        dp(55),
-                        dp(55)
-                )
-        );
-
-        LinearLayout textLayout =
-                new LinearLayout(this);
-
-        textLayout.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        textLayout.setGravity(
-                Gravity.CENTER_VERTICAL |
-                Gravity.RIGHT
-        );
-
-        textLayout.setPadding(
-                dp(12),
+        authorParams.setMargins(
                 0,
+                dp(8),
                 0,
                 0
         );
 
-        LinearLayout.LayoutParams textParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        1
-                );
-
-        textLayout.setLayoutParams(textParams);
-
-        TextView titleView =
-                textView(
-                        title,
-                        20,
-                        Color.rgb(30, 30, 30),
-                        Gravity.RIGHT
-                );
-
-        titleView.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
+        layout.addView(
+                author,
+                authorParams
         );
 
-        TextView descriptionView =
+        TextView location =
                 textView(
-                        description,
+                        "الحسوة اليمن",
                         14,
-                        Color.rgb(100, 100, 100),
-                        Gravity.RIGHT
+                        Color.rgb(20, 70, 110),
+                        Gravity.CENTER
                 );
 
-        descriptionView.setPadding(
+        LinearLayout.LayoutParams locationParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        locationParams.setMargins(
                 0,
                 dp(5),
                 0,
                 0
         );
 
-        textLayout.addView(titleView);
-        textLayout.addView(descriptionView);
+        layout.addView(
+                location,
+                locationParams
+        );
 
-        card.addView(textLayout);
-
-        card.setOnClickListener(v -> {
-
-            if (title.equals("الخريطة")) {
-
-                showMap();
-
-            } else {
-
-                Toast.makeText(
-                        MainActivity.this,
-                        title,
-                        Toast.LENGTH_SHORT
-                ).show();
-            }
-        });
-
-        mainLayout.addView(card);
-    }
-
-    private File getMapFile() throws Exception {
-
-        File mapFile =
-                new File(
-                        getFilesDir(),
-                        "Yemen.map"
+        TextView version =
+                textView(
+                        "الإصدار 1.0",
+                        12,
+                        Color.GRAY,
+                        Gravity.CENTER
                 );
 
-        InputStream input =
-                getAssets().open("Yemen.map");
+        LinearLayout.LayoutParams versionParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
 
-        FileOutputStream output =
-                new FileOutputStream(mapFile);
+        versionParams.setMargins(
+                0,
+                dp(5),
+                0,
+                0
+        );
 
-        byte[] buffer =
-                new byte[1024 * 1024];
+        layout.addView(
+                version,
+                versionParams
+        );
 
-        int length;
-
-        while (
-                (length = input.read(buffer)) > 0
-        ) {
-            output.write(
-                    buffer,
-                    0,
-                    length
-            );
-        }
-
-        output.flush();
-        output.close();
-        input.close();
-
-        return mapFile;
+        setContentView(layout);
     }
 
     private void showMap() {
@@ -464,6 +316,9 @@ public class MainActivity extends Activity {
         final MapView mapView =
                 new MapView(this);
 
+        mapView.setClickable(true);
+        mapView.setFocusable(true);
+
         layout.addView(
                 mapView,
                 new LinearLayout.LayoutParams(
@@ -482,13 +337,16 @@ public class MainActivity extends Activity {
         try {
 
             /*
-             * نسخ ملف الخريطة من assets
+             * تحميل Yemen.map من assets
              */
             File mapFile =
                     getMapFile();
 
+            long fileSize =
+                    mapFile.length();
+
             /*
-             * قراءة ملف Mapsforge
+             * فتح الخريطة
              */
             MapFile mapFileReader =
                     new MapFile(mapFile);
@@ -497,19 +355,19 @@ public class MainActivity extends Activity {
                     mapFileReader;
 
             /*
-             * الحصول على حدود الخريطة نفسها
+             * قراءة حدود الخريطة الحقيقية
              */
             BoundingBox bounds =
                     mapDataStore.boundingBox();
 
             /*
-             * مركز الخريطة الحقيقي
+             * حساب مركز الخريطة تلقائياً
              */
             LatLong center =
                     bounds.getCenterPoint();
 
             /*
-             * إنشاء الكاش
+             * حجم البلاطة
              */
             int tileSize =
                     mapView
@@ -517,17 +375,20 @@ public class MainActivity extends Activity {
                             .displayModel
                             .getTileSize();
 
+            /*
+             * Tile Cache جديد للتجربة
+             */
             TileCache tileCache =
                     AndroidUtil.createTileCache(
                             this,
-                            "yemen-map-cache-final",
+                            "yemen-debug-cache",
                             tileSize,
                             2f,
                             2f
                     );
 
             /*
-             * طبقة الرسم
+             * طبقة الخريطة
              */
             TileRendererLayer renderer =
                     new TileRendererLayer(
@@ -543,7 +404,7 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * نظام رسم الخريطة
+             * Render Theme
              */
             XmlRenderTheme renderTheme =
                     new AssetsRenderTheme(
@@ -566,30 +427,51 @@ public class MainActivity extends Activity {
                     .add(renderer);
 
             /*
-             * وضع الخريطة في مركز بياناتها
+             * وضع الخريطة في مركزها الحقيقي
              */
-            mapView.setCenter(center);
+            mapView.setCenter(
+                    center
+            );
 
             /*
-             * مستوى التكبير
+             * مستوى تكبير مناسب للتشخيص
              */
             mapView.setZoomLevel(
-                    (byte) 8
+                    (byte) 12
             );
 
             mapView.invalidate();
 
+            /*
+             * معلومات تشخيصية
+             */
+            String info =
+                    "حجم Yemen.map: "
+                            + (fileSize / 1024 / 1024)
+                            + " MB\n"
+                            + "الشمال: "
+                            + bounds.maxLatitude
+                            + "\n"
+                            + "الجنوب: "
+                            + bounds.minLatitude
+                            + "\n"
+                            + "الشرق: "
+                            + bounds.maxLongitude
+                            + "\n"
+                            + "الغرب: "
+                            + bounds.minLongitude;
+
             Toast.makeText(
                     this,
-                    "تم تحميل الخريطة بنجاح",
-                    Toast.LENGTH_SHORT
+                    info,
+                    Toast.LENGTH_LONG
             ).show();
 
         } catch (Exception e) {
 
             Toast.makeText(
                     this,
-                    "خطأ الخريطة:\n"
+                    "خطأ حقيقي في الخريطة:\n"
                             + e.getClass().getSimpleName()
                             + "\n"
                             + e.getMessage(),
@@ -598,12 +480,172 @@ public class MainActivity extends Activity {
         }
     }
 
+    private File getMapFile()
+            throws Exception {
+
+        /*
+         * نستخدم اسم جديد حتى لا نقرأ
+         * نسخة قديمة من Yemen.map
+         */
+        File mapFile =
+                new File(
+                        getFilesDir(),
+                        "Yemen_debug.map"
+                );
+
+        /*
+         * إذا كانت النسخة القديمة موجودة
+         * نحذفها أولاً
+         */
+        if (mapFile.exists()) {
+            mapFile.delete();
+        }
+
+        /*
+         * فتح Yemen.map من assets
+         */
+        InputStream input =
+                getAssets().open(
+                        "Yemen.map"
+                );
+
+        /*
+         * نسخ الخريطة إلى التخزين الداخلي
+         */
+        FileOutputStream output =
+                new FileOutputStream(
+                        mapFile
+                );
+
+        byte[] buffer =
+                new byte[1024 * 1024];
+
+        int length;
+
+        while (
+                (length = input.read(buffer)) > 0
+        ) {
+
+            output.write(
+                    buffer,
+                    0,
+                    length
+            );
+        }
+
+        output.flush();
+        output.close();
+        input.close();
+
+        return mapFile;
+    }
+
+    private TextView button(
+            String text,
+            int size
+    ) {
+
+        TextView view =
+                textView(
+                        text,
+                        size,
+                        Color.WHITE,
+                        Gravity.CENTER
+                );
+
+        view.setBackgroundColor(
+                Color.rgb(20, 90, 135)
+        );
+
+        view.setPadding(
+                dp(10),
+                dp(18),
+                dp(10),
+                dp(18)
+        );
+
+        return view;
+    }
+
+    private LinearLayout.LayoutParams buttonParams() {
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        params.setMargins(
+                0,
+                dp(7),
+                0,
+                dp(7)
+        );
+
+        return params;
+    }
+
+    private TextView textView(
+            String text,
+            int size,
+            int color,
+            int gravity
+    ) {
+
+        TextView view =
+                new TextView(this);
+
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setGravity(gravity);
+
+        return view;
+    }
+
+    private void showMessage(
+            String message
+    ) {
+
+        Toast.makeText(
+                this,
+                message,
+                Toast.LENGTH_SHORT
+        ).show();
+    }
+
+    private int dp(
+            int value
+    ) {
+
+        return (int)
+                (
+                        value
+                                * getResources()
+                                        .getDisplayMetrics()
+                                        .density
+                );
+    }
+
     @Override
     protected void onDestroy() {
 
         super.onDestroy();
 
-        AndroidGraphicFactory
-                .clearResourceMemoryCache();
+        AndroidGraphicFactory.clearResourceMemoryCache();
     }
 }
+
+هذا الكود لا يحتاج إلى تغيير "build.gradle".
+
+بعد الحفظ شغّل GitHub Actions وابنِ التطبيق وثبّته.
+
+المهم: عند فتح الخريطة ستظهر رسالة فيها:
+
+- حجم "Yemen.map"
+- الشمال
+- الجنوب
+- الشرق
+- الغرب
+
+أرسل لي صورة الرسالة أو اكتب الأرقام التي تظهر فيها. من هذه الأرقام سنحدد مباشرة لماذا الخريطة بيضاء، بدل أن نغيّر الكود عشوائيًا.
