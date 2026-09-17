@@ -1,19 +1,13 @@
-name: Build World Mapsforge Map
+name: Test Mapsforge Map Writer
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build-world-map:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -21,360 +15,37 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install tools
+      - name: Download Mapsforge Map Writer 0.25.0
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            wget \
-            unzip \
-            osmium-tool \
-            gdal-bin \
-            python3-pip
-
-      - name: Install ogr2osm
-        run: |
-          python3 -m pip install --break-system-packages ogr2osm
-
-      - name: Create directories
-        run: |
-          mkdir -p world-data
-          mkdir -p map-output
-          mkdir -p tools
-
-      # ==================================================
-      # WORLD LAND
-      # ==================================================
-
-      - name: Download world land polygons
-        run: |
-          wget -O world-data/land.zip \
-            https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
-
-          unzip -o world-data/land.zip \
-            -d world-data/land
-
-      - name: Find land shapefile
-        run: |
-          LAND_SHP=$(find world-data/land \
-            -type f \
-            -name "*.shp" \
-            | head -n 1)
-
-          if [ -z "$LAND_SHP" ]; then
-            echo "Land shapefile was not found."
-            exit 1
-          fi
-
-          echo "LAND_SHP=$LAND_SHP" >> "$GITHUB_ENV"
-
-          echo "Land shapefile:"
-          echo "$LAND_SHP"
-
-      - name: Convert land to OSM
-        run: |
-          ogr2osm \
-            "$LAND_SHP" \
-            -o world-land.osm
-
-      # ==================================================
-      # NATURAL EARTH COUNTRIES
-      # ==================================================
-
-      - name: Download Natural Earth countries
-        run: |
-          wget -O world-data/countries.zip \
-            https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
-
-          mkdir -p world-data/countries
-
-          unzip -o world-data/countries.zip \
-            -d world-data/countries
-
-      - name: Create country translation
-        run: |
-          cat > tools/ne_countries.py <<'PY'
-          def filterFeature(attrs):
-              return True
-
-          def translateAttributes(attrs):
-              tags = {}
-
-              name = attrs.get("NAME")
-
-              if name:
-                  tags["name"] = str(name)
-
-              iso = attrs.get("ISO_A2")
-
-              if iso and iso != "-99":
-                  tags["ISO3166-1"] = str(iso)
-
-              tags["boundary"] = "administrative"
-              tags["admin_level"] = "2"
-
-              return tags
-          PY
-
-      - name: Find country shapefile
-        run: |
-          COUNTRY_SHP=$(find world-data/countries \
-            -type f \
-            -name "ne_110m_admin_0_countries.shp" \
-            | head -n 1)
-
-          if [ -z "$COUNTRY_SHP" ]; then
-            echo "Country shapefile was not found."
-            exit 1
-          fi
-
-          echo "COUNTRY_SHP=$COUNTRY_SHP" >> "$GITHUB_ENV"
-
-          echo "Country shapefile:"
-          echo "$COUNTRY_SHP"
-
-      - name: Convert countries to OSM
-        run: |
-          ogr2osm \
-            "$COUNTRY_SHP" \
-            -o world-countries.osm \
-            -t tools/ne_countries.py
-
-      # ==================================================
-      # ADD LAND TAGS
-      # ==================================================
-
-      - name: Add land tags
-        run: |
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-
-          input_file = "world-land.osm"
-          output_file = "world-land-tagged.osm"
-
-          tree = ET.parse(input_file)
-          root = tree.getroot()
-
-          for way in root.findall("way"):
-              has_natural = False
-
-              for tag in way.findall("tag"):
-                  if tag.attrib.get("k") == "natural":
-                      has_natural = True
-                      break
-
-              if not has_natural:
-                  ET.SubElement(
-                      way,
-                      "tag",
-                      {
-                          "k": "natural",
-                          "v": "land"
-                      }
-                  )
-
-          tree.write(
-              output_file,
-              encoding="UTF-8",
-              xml_declaration=True
-          )
-
-          print("Land tags added successfully.")
-          PY
-
-      # ==================================================
-      # CREATE ONE WORLD OSM FILE
-      # ==================================================
-
-      - name: Combine world data
-        run: |
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-
-          land_tree = ET.parse("world-land-tagged.osm")
-          land_root = land_tree.getroot()
-
-          country_tree = ET.parse("world-countries.osm")
-          country_root = country_tree.getroot()
-
-          output_root = ET.Element(
-              "osm",
-              {
-                  "version": "0.6",
-                  "generator": "AlHaswa World Map Builder"
-              }
-          )
-
-          used_ids = set()
-
-          # Land nodes
-          for node in land_root.findall("node"):
-              old_id = node.attrib["id"]
-
-              if old_id not in used_ids:
-                  used_ids.add(old_id)
-                  output_root.append(node)
-
-          # Land ways
-          for way in land_root.findall("way"):
-              old_id = way.attrib["id"]
-
-              if old_id not in used_ids:
-                  used_ids.add(old_id)
-                  output_root.append(way)
-
-          # Country nodes
-          next_id = -1
-          country_id_map = {}
-
-          for node in country_root.findall("node"):
-              old_id = node.attrib["id"]
-
-              new_id = str(next_id)
-              next_id -= 1
-
-              country_id_map[old_id] = new_id
-              node.attrib["id"] = new_id
-
-              output_root.append(node)
-
-          # Country ways
-          for way in country_root.findall("way"):
-              way.attrib["id"] = str(next_id)
-              next_id -= 1
-
-              for nd in way.findall("nd"):
-                  old_ref = nd.attrib["ref"]
-
-                  if old_ref in country_id_map:
-                      nd.attrib["ref"] = country_id_map[old_ref]
-
-              output_root.append(way)
-
-          tree = ET.ElementTree(output_root)
-
-          tree.write(
-              "world.osm",
-              encoding="UTF-8",
-              xml_declaration=True
-          )
-
-          print("world.osm created successfully.")
-          print("Total elements:", len(output_root))
-          PY
-
-      # ==================================================
-      # OSM → PBF
-      # ==================================================
-
-      - name: Convert world OSM to PBF
-        run: |
-          osmium cat \
-            world.osm \
-            -o world.pbf \
-            -f pbf
-
-      - name: Check world PBF
-        run: |
-          ls -lh world.osm
-          ls -lh world.pbf
-
-          osmium fileinfo world.pbf
-
-      # ==================================================
-      # MAPSFORGE MAP WRITER
-      # ==================================================
-
-      - name: Download Mapsforge Map Writer
-        run: |
-          wget -O mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+          wget -O mapsforge-map-writer.jar \
             https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
-
-          ls -lh mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
-
-      # ==================================================
-      # CHECK JAR
-      # ==================================================
 
       - name: Inspect Map Writer
         run: |
-          echo "=== MAP WRITER CLASSES ==="
+          echo "=== JAR CONTENT ==="
 
-          jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
-            | grep -E 'MapFileWriter|MapWriter|Main' \
+          jar tf mapsforge-map-writer.jar \
+            | grep -E "osmosis|MapFileWriter|MapWriter" \
             | head -n 100
 
-      # ==================================================
-      # FIND MAIN CLASS
-      # ==================================================
-
-      - name: Find Map Writer class
+      - name: Check Manifest
         run: |
-          CLASS=$(jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
-            | grep 'MapFileWriter.class' \
-            | head -n 1 \
-            | sed 's|/|.|g' \
-            | sed 's|.class$||')
+          echo "=== MANIFEST ==="
 
-          if [ -z "$CLASS" ]; then
-            echo "MapFileWriter.class was not found."
+          unzip -p mapsforge-map-writer.jar META-INF/MANIFEST.MF || true
 
-            echo "Available writer classes:"
-            jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
-              | grep -i writer \
-              | head -n 100
-
-            exit 1
-          fi
-
-          echo "MAP_WRITER_CLASS=$CLASS" >> "$GITHUB_ENV"
-
-          echo "Found Map Writer class:"
-          echo "$CLASS"
-
-      # ==================================================
-      # GENERATE WORLD MAP
-      # ==================================================
-
-      - name: Generate World.map
+      - name: Find Osmosis classes
         run: |
-          echo "Using:"
-          echo "$MAP_WRITER_CLASS"
+          echo "=== OSMOSIS CLASSES ==="
 
-          java -Xmx6g \
-            -cp "mapsforge-map-writer-0.25.0-jar-with-dependencies.jar" \
-            "$MAP_WRITER_CLASS" \
-            --map-file=world.pbf \
-            --output-dir=map-output \
-            --map-start-position=15,45 \
-            --map-start-zoom=2 \
-            --preferred-language=en
+          jar tf mapsforge-map-writer.jar \
+            | grep -i "osmosis" \
+            | head -n 100
 
-      # ==================================================
-      # CHECK RESULT
-      # ==================================================
-
-      - name: Check World.map
+      - name: Find Map Writer classes
         run: |
-          echo "=== MAP OUTPUT ==="
+          echo "=== MAP WRITER CLASSES ==="
 
-          ls -lh map-output/
-
-          if [ ! -f map-output/World.map ]; then
-            echo "World.map was not created."
-            exit 1
-          fi
-
-          echo "World.map created successfully."
-
-          du -h map-output/World.map
-
-      # ==================================================
-      # UPLOAD
-      # ==================================================
-
-      - name: Upload World.map
-        uses: actions/upload-artifact@v4
-        with:
-          name: World-map-0.25.0
-          path: map-output/World.map
-          compression-level: 0
+          jar tf mapsforge-map-writer.jar \
+            | grep "org/mapsforge/map/writer" \
+            | head -n 100
