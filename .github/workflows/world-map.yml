@@ -11,86 +11,278 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install tools
+      - name: Install required tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip osmium-tool
+          sudo apt-get install -y \
+            wget \
+            unzip \
+            osmium-tool \
+            osmosis \
+            python3 \
+            python3-pip
 
-      - name: Download Osmosis 0.48.3
-        run: |
-          wget -O osmosis.zip \
-            https://github.com/openstreetmap/osmosis/releases/download/0.48.3/osmosis-0.48.3.zip
-
-          unzip -q osmosis.zip -d osmosis
-
-          chmod +x osmosis/bin/osmosis
-
-      - name: Download World OSM data
-        run: |
-          wget -O planet-coastlines.osm.pbf \
-            https://osmdata.openstreetmap.de/download/planet-coastlines-latest.osm.pbf
-
-      - name: Download Natural Earth countries
-        run: |
-          wget -O countries.zip \
-            https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
-
-          unzip -q countries.zip -d countries
-
-      - name: Download Mapsforge Map Writer
+      - name: Download Mapsforge Map Writer 0.25.0
         run: |
           wget -O mapsforge-map-writer.jar \
             https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
 
-      - name: Install Mapsforge plugin
+      - name: Show Osmosis installation
         run: |
-          cp mapsforge-map-writer.jar osmosis/lib/default/
+          which osmosis
+          osmosis --version
+          dpkg -L osmosis | grep -E 'lib/default|osmosis$' || true
 
-      - name: Prepare output
+      - name: Install Mapsforge plugin into Osmosis
+        run: |
+          OSMOSIS_HOME="$(dirname "$(dirname "$(readlink -f "$(which osmosis)")")")"
+
+          echo "OSMOSIS_HOME=$OSMOSIS_HOME"
+
+          find /usr/share /usr/lib -type d -path "*/osmosis*/lib/default" 2>/dev/null || true
+
+          PLUGIN_DIR=$(find /usr/share /usr/lib -type d -path "*/osmosis*/lib/default" 2>/dev/null | head -n 1)
+
+          if [ -z "$PLUGIN_DIR" ]; then
+            echo "Could not find Osmosis lib/default directory"
+            exit 1
+          fi
+
+          echo "Using plugin directory: $PLUGIN_DIR"
+
+          cp mapsforge-map-writer.jar "$PLUGIN_DIR/"
+
+          echo "Mapsforge plugin installed:"
+          ls -lh "$PLUGIN_DIR/mapsforge-map-writer.jar"
+
+      - name: Download Natural Earth countries
+        run: |
+          wget -O ne_countries.zip \
+            https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
+
+          unzip -o ne_countries.zip -d natural-earth
+
+      - name: Download Natural Earth land
+        run: |
+          wget -O ne_land.zip \
+            https://naciscdn.org/naturalearth/110m/physical/ne_110m_land.zip
+
+          unzip -o ne_land.zip -d natural-earth-land
+
+      - name: Install Python GIS tools
+        run: |
+          python3 -m pip install --break-system-packages \
+            geopandas \
+            shapely \
+            pyproj
+
+      - name: Create lightweight World OSM data
+        run: |
+          cat > create_world.py <<'PY'
+          import geopandas as gpd
+          import xml.etree.ElementTree as ET
+          import itertools
+
+          countries = gpd.read_file(
+              "natural-earth/ne_110m_admin_0_countries.shp"
+          )
+
+          land = gpd.read_file(
+              "natural-earth-land/ne_110m_land.shp"
+          )
+
+          root = ET.Element(
+              "osm",
+              version="0.6",
+              generator="AlHaswa World Map Builder"
+          )
+
+          node_id = itertools.count(1)
+          way_id = itertools.count(1)
+
+          def add_polygon(coords, tags):
+              coords = list(coords)
+
+              if len(coords) < 4:
+                  return
+
+              first = coords[0]
+              last = coords[-1]
+
+              if first != last:
+                  coords.append(first)
+
+              refs = []
+
+              for lon, lat in coords:
+                  nid = next(node_id)
+
+                  ET.SubElement(
+                      root,
+                      "node",
+                      id=str(nid),
+                      lon=str(lon),
+                      lat=str(lat)
+                  )
+
+                  refs.append(nid)
+
+              wid = next(way_id)
+
+              way = ET.SubElement(
+                  root,
+                  "way",
+                  id=str(wid)
+              )
+
+              for ref in refs:
+                  ET.SubElement(
+                      way,
+                      "nd",
+                      ref=str(ref)
+                  )
+
+              for key, value in tags.items():
+                  ET.SubElement(
+                      way,
+                      "tag",
+                      k=key,
+                      v=str(value)
+                  )
+
+          # Land
+          for geom in land.geometry:
+              if geom is None:
+                  continue
+
+              if geom.geom_type == "Polygon":
+                  add_polygon(
+                      geom.exterior.coords,
+                      {
+                          "natural": "land"
+                      }
+                  )
+
+              elif geom.geom_type == "MultiPolygon":
+                  for polygon in geom.geoms:
+                      add_polygon(
+                          polygon.exterior.coords,
+                          {
+                              "natural": "land"
+                          }
+                      )
+
+          # Countries and borders
+          for _, row in countries.iterrows():
+              geom = row.geometry
+
+              name = row.get("NAME")
+              iso = row.get("ISO_A3")
+
+              if not name:
+                  continue
+
+              tags = {
+                  "boundary": "administrative",
+                  "admin_level": "2",
+                  "name": str(name)
+              }
+
+              if iso:
+                  tags["ISO3166-1"] = str(iso)
+
+              if geom is None:
+                  continue
+
+              if geom.geom_type == "Polygon":
+                  add_polygon(
+                      geom.exterior.coords,
+                      tags
+                  )
+
+              elif geom.geom_type == "MultiPolygon":
+                  for polygon in geom.geoms:
+                      add_polygon(
+                          polygon.exterior.coords,
+                          tags
+                      )
+
+          tree = ET.ElementTree(root)
+          tree.write(
+              "world.osm",
+              encoding="utf-8",
+              xml_declaration=True
+          )
+
+          print("World OSM file created.")
+          PY
+
+          python3 create_world.py
+
+          ls -lh world.osm
+
+      - name: Convert World OSM to PBF
+        run: |
+          osmium cat world.osm \
+            -o world-unsorted.pbf \
+            --overwrite
+
+          osmium sort world-unsorted.pbf \
+            -o world.pbf \
+            --overwrite
+
+          echo "World PBF created:"
+          ls -lh world.pbf
+
+      - name: Verify Mapsforge Osmosis plugin
+        run: |
+          echo "Checking Mapsforge plugin..."
+
+          jar tf mapsforge-map-writer.jar | grep \
+            "org/mapsforge/map/writer/osmosis/MapFileWriter"
+
+          echo "Plugin configuration:"
+          unzip -p mapsforge-map-writer.jar osmosis-plugins.conf
+
+      - name: Build World.map with Mapsforge
         run: |
           mkdir -p map-output
 
-      - name: Check Osmosis Mapsforge plugin
-        run: |
-          osmosis/bin/osmosis --help | head -100
-
-      - name: Generate World map
-        run: |
-          osmosis/bin/osmosis \
-            --read-pbf file=planet-coastlines.osm.pbf \
+          osmosis \
+            --read-pbf file=world.pbf \
             --mapfile-writer \
-            file=map-output/World.map \
-            map-start-position=15,45 \
-            map-start-zoom=2 \
-            bbox=-180,-85,180,85 \
-            preferred-languages=en \
-            zoom-interval-config=0,0,5,6,6,10,10,14
+              file=map-output/World.map \
+              map-start-position=0,0 \
+              map-start-zoom=2 \
+              preferred-languages=en \
+              threads=2 \
+              bbox-enlargement=0 \
+              polygon-clipping=true \
+              way-clipping=true
 
-      - name: Check World.map
+      - name: Check generated World.map
         run: |
-          echo "===== WORLD MAP ====="
           ls -lh map-output/
 
           if [ ! -f map-output/World.map ]; then
-            echo "World.map was not created."
+            echo "World.map was not created"
             exit 1
           fi
 
           echo "World.map created successfully."
-          du -h map-output/World.map
 
-      - name: Upload World.map
+      - name: Upload World.map artifact
         uses: actions/upload-artifact@v4
         with:
           name: World-map
           path: map-output/World.map
-          compression-level: 0
+          if-no-files-found: error
