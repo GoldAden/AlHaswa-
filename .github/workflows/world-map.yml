@@ -112,13 +112,11 @@ jobs:
       # =========================
       # تحويل اليابسة إلى OSM
       # =========================
-      - name: Convert land polygons to OSM
+      -       - name: Convert land polygons to OSM
         run: |
           ogr2osm \
             "$LAND_SHP" \
-            -o land.osm \
-            --add-tag natural=land
-
+            -o land.osm
       # =========================
       # تحويل حدود الدول إلى OSM
       # =========================
