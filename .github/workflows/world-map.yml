@@ -24,12 +24,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            wget \
-            unzip \
-            osmium-tool \
-            gdal-bin \
-            python3-pip
+          sudo apt-get install -y wget unzip osmium-tool gdal-bin python3-pip
 
       - name: Install ogr2osm
         run: |
@@ -41,10 +36,6 @@ jobs:
           mkdir -p map-output
           mkdir -p tools
 
-      # --------------------------------------------------
-      # Download simplified world land polygons
-      # --------------------------------------------------
-
       - name: Download world land polygons
         run: |
           wget -O world-data/land.zip \
@@ -53,14 +44,8 @@ jobs:
           unzip -o world-data/land.zip \
             -d world-data/land
 
-      # --------------------------------------------------
-      # Find land shapefile
-      # --------------------------------------------------
-
       - name: Find land shapefile
         run: |
-          echo "Searching for shapefile..."
-
           LAND_SHP=$(find world-data/land \
             -type f \
             -name "*.shp" \
@@ -73,22 +58,14 @@ jobs:
 
           echo "LAND_SHP=$LAND_SHP" >> "$GITHUB_ENV"
 
-          echo "Found:"
+          echo "Found land shapefile:"
           echo "$LAND_SHP"
-
-      # --------------------------------------------------
-      # Convert land polygons to OSM
-      # --------------------------------------------------
 
       - name: Convert land polygons to OSM
         run: |
           ogr2osm \
             "$LAND_SHP" \
             -o world-land.osm
-
-      # --------------------------------------------------
-      # Download Natural Earth countries
-      # --------------------------------------------------
 
       - name: Download Natural Earth countries
         run: |
@@ -100,27 +77,20 @@ jobs:
           unzip -o world-data/countries.zip \
             -d world-data/countries
 
-      # --------------------------------------------------
-      # Create Natural Earth translation
-      # --------------------------------------------------
-
       - name: Create Natural Earth translation
         run: |
           cat > tools/ne_countries.py <<'PY'
           def filterFeature(attrs):
               return True
 
-
           def translateAttributes(attrs):
               tags = {}
 
               name = attrs.get("NAME")
-
               if name:
                   tags["name"] = str(name)
 
               iso = attrs.get("ISO_A2")
-
               if iso and iso != "-99":
                   tags["ISO3166-1"] = str(iso)
 
@@ -129,10 +99,6 @@ jobs:
 
               return tags
           PY
-
-      # --------------------------------------------------
-      # Find country shapefile
-      # --------------------------------------------------
 
       - name: Find country shapefile
         run: |
@@ -148,12 +114,8 @@ jobs:
 
           echo "COUNTRY_SHP=$COUNTRY_SHP" >> "$GITHUB_ENV"
 
-          echo "Found:"
+          echo "Found country shapefile:"
           echo "$COUNTRY_SHP"
-
-      # --------------------------------------------------
-      # Convert countries to OSM
-      # --------------------------------------------------
 
       - name: Convert countries to OSM
         run: |
@@ -161,10 +123,6 @@ jobs:
             "$COUNTRY_SHP" \
             -o world-countries.osm \
             -t tools/ne_countries.py
-
-      # --------------------------------------------------
-      # Add land tag to land polygons
-      # --------------------------------------------------
 
       - name: Add land tags
         run: |
@@ -177,20 +135,17 @@ jobs:
           tree = ET.parse(input_file)
           root = tree.getroot()
 
-          max_id = 0
-
-          for element in root:
-              if element.tag == "way":
-                  try:
-                      element_id = int(element.attrib.get("id", "0"))
-                      max_id = max(max_id, abs(element_id))
-                  except:
-                      pass
-
           for way in root.findall("way"):
-              tag = way.find("tag")
+              tags = way.findall("tag")
 
-              if tag is None:
+              has_natural = False
+
+              for tag in tags:
+                  if tag.attrib.get("k") == "natural":
+                      has_natural = True
+                      break
+
+              if not has_natural:
                   ET.SubElement(
                       way,
                       "tag",
@@ -206,22 +161,73 @@ jobs:
               xml_declaration=True
           )
 
-          print("Land tags added.")
+          print("Land tags added successfully.")
           PY
-
-      # --------------------------------------------------
-      # Convert OSM XML to PBF
-      # --------------------------------------------------
 
       - name: Convert land to PBF
         run: |
           osmium cat \
             world-land-tagged.osm \
             -o world-land.pbf \
-            --overwrite
+            -f pbf
 
       - name: Convert countries to PBF
         run: |
           osmium cat \
             world-countries.osm \
-           
+            -o world-countries.pbf \
+            -f pbf
+
+      - name: Merge world data
+        run: |
+          osmium merge \
+            world-land.pbf \
+            world-countries.pbf \
+            -o world.pbf \
+            -f pbf \
+            --overwrite
+
+      - name: Download Mapsforge Map Writer 0.25.0
+        run: |
+          wget -O mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+          ls -lh mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+      - name: Verify Map Writer
+        run: |
+          file mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+          jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            | head -n 20
+
+      - name: Generate World.map
+        run: |
+          java -Xmx6g \
+            -jar mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            --map-file=world.pbf \
+            --output-dir=map-output \
+            --map-start-position=15,45 \
+            --map-start-zoom=2 \
+            --preferred-language=en
+
+      - name: Check World.map
+        run: |
+          echo "=== MAP OUTPUT ==="
+          ls -lh map-output/
+
+          if [ ! -f map-output/World.map ]; then
+            echo "World.map was not created."
+            exit 1
+          fi
+
+          echo "World.map created successfully."
+
+          du -h map-output/World.map
+
+      - name: Upload World.map
+        uses: actions/upload-artifact@v4
+        with:
+          name: World-map-0.25.0
+          path: map-output/World.map
+          compression-level: 0
