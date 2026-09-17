@@ -16,10 +16,8 @@ import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
-
 import org.mapsforge.map.datastore.MapDataStore;
 import org.mapsforge.map.datastore.MultiMapDataStore;
-
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
@@ -48,7 +46,7 @@ public class MainActivity extends Activity {
                 getResources()
                         .getDisplayMetrics()
                         .density
-                + 0.5f
+                        + 0.5f
         );
     }
 
@@ -392,25 +390,25 @@ public class MainActivity extends Activity {
     }
 
     /*
-     * نسخ ملف Map من Assets إلى مساحة التطبيق الداخلية.
+     * نسخ ملف من assets إلى التخزين الداخلي
      */
     private File copyAssetToInternal(
             String assetName
     ) throws Exception {
 
-        File mapFile =
+        File file =
                 new File(
                         getFilesDir(),
                         assetName
                 );
 
-        if (!mapFile.exists()) {
+        if (!file.exists()) {
 
             InputStream input =
                     getAssets().open(assetName);
 
             FileOutputStream output =
-                    new FileOutputStream(mapFile);
+                    new FileOutputStream(file);
 
             byte[] buffer =
                     new byte[8192];
@@ -433,11 +431,11 @@ public class MainActivity extends Activity {
             input.close();
         }
 
-        return mapFile;
+        return file;
     }
 
     /*
-     * تحميل خريطة اليمن + خريطة العالم.
+     * تحميل خريطة اليمن + خريطة العالم
      */
     private MapDataStore getCombinedMap()
             throws Exception {
@@ -458,29 +456,26 @@ public class MainActivity extends Activity {
         MapFile worldMap =
                 new MapFile(worldFile);
 
-        /*
-         * RETURN_FIRST:
-         *
-         * نضع Yemen.map أولاً.
-         *
-         * عندما تكون المنطقة داخل اليمن،
-         * يتم استخدام Yemen.map التفصيلية.
-         *
-         * وعندما تكون خارج نطاق Yemen.map،
-         * يتم استخدام world.map.
-         */
         MultiMapDataStore multiMapDataStore =
                 new MultiMapDataStore(
-                        MapDataStore.DataPolicy.RETURN_FIRST
+                        MultiMapDataStore.DataPolicy.RETURN_FIRST
                 );
 
+        /*
+         * خريطة اليمن
+         */
         multiMapDataStore.addMapDataStore(
                 yemenMap,
+                true,
                 false
         );
 
+        /*
+         * خريطة العالم
+         */
         multiMapDataStore.addMapDataStore(
                 worldMap,
+                true,
                 false
         );
 
@@ -547,10 +542,7 @@ public class MainActivity extends Activity {
         try {
 
             /*
-             * تحميل الخريطتين:
-             *
-             * Yemen.map
-             * world.map
+             * تحميل اليمن + العالم
              */
             MapDataStore mapDataStore =
                     getCombinedMap();
@@ -583,11 +575,6 @@ public class MainActivity extends Activity {
                             AndroidGraphicFactory.INSTANCE
                     );
 
-            /*
-             * Render Theme
-             *
-             * Mapsforge 0.25.0
-             */
             XmlRenderTheme renderTheme =
                     new AssetsRenderTheme(
                             getAssets(),
@@ -608,7 +595,7 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * نبدأ من اليمن.
+             * البداية على اليمن
              */
             mapView.setCenter(
                     new LatLong(
@@ -617,9 +604,6 @@ public class MainActivity extends Activity {
                     )
             );
 
-            /*
-             * تكبير مناسب لليمن.
-             */
             mapView.setZoomLevel(
                     (byte) 6
             );
@@ -628,13 +612,11 @@ public class MainActivity extends Activity {
 
             Toast.makeText(
                     this,
-                    "تم تحميل خريطة العالم واليمن بدون إنترنت",
+                    "تم تحميل خريطة اليمن والعالم بدون إنترنت",
                     Toast.LENGTH_SHORT
             ).show();
 
         } catch (Exception e) {
-
-            e.printStackTrace();
 
             Toast.makeText(
                     this,
