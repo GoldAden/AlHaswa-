@@ -1,0 +1,234 @@
+name: Build World Mapsforge Map
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-world-map:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # =========================
+      # تحميل المشروع
+      # =========================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # =========================
+      # إعداد Java
+      # =========================
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # =========================
+      # تثبيت الأدوات
+      # =========================
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            wget \
+            unzip \
+            gdal-bin \
+            python3 \
+            python3-pip \
+            osmium-tool
+
+      # =========================
+      # تحميل Natural Earth
+      # 110m = خريطة عالمية خفيفة
+      # =========================
+      - name: Download Natural Earth
+        run: |
+          wget -O natural-earth.zip \
+            https://naturalearth.s3.amazonaws.com/5.1.2/110m_cultural/ne_110m_admin_0_countries.zip
+
+          mkdir -p natural-earth
+          unzip -o natural-earth.zip -d natural-earth
+
+      # =========================
+      # تحويل حدود الدول إلى GeoJSON
+      # =========================
+      - name: Convert countries to GeoJSON
+        run: |
+          ogr2ogr \
+            -f GeoJSON \
+            countries.geojson \
+            natural-earth/ne_110m_admin_0_countries.shp
+
+      # =========================
+      # إنشاء OSM XML مبسط
+      # =========================
+      - name: Create simplified OSM
+        run: |
+          cat > create_world_osm.py <<'PY'
+          import json
+          import html
+
+          data = json.load(open("countries.geojson", encoding="utf-8"))
+
+          nodes = []
+          ways = []
+
+          node_id = 1
+          way_id = -1
+
+          for feature in data["features"]:
+
+              props = feature.get("properties", {})
+              geometry = feature.get("geometry")
+
+              if not geometry:
+                  continue
+
+              name = props.get("NAME") or props.get("ADMIN") or "Unknown"
+
+              polygons = []
+
+              if geometry["type"] == "Polygon":
+                  polygons = [geometry["coordinates"]]
+
+              elif geometry["type"] == "MultiPolygon":
+                  polygons = geometry["coordinates"]
+
+              for polygon in polygons:
+
+                  if not polygon:
+                      continue
+
+                  outer = polygon[0]
+
+                  refs = []
+
+                  for lon, lat in outer:
+
+                      nid = node_id
+                      node_id += 1
+
+                      nodes.append(
+                          f'    <node id="{nid}" lat="{lat}" lon="{lon}"/>'
+                      )
+
+                      refs.append(nid)
+
+                  if len(refs) < 4:
+                      continue
+
+                  if refs[0] != refs[-1]:
+                      refs.append(refs[0])
+
+                  wid = way_id
+                  way_id -= 1
+
+                  tags = [
+                      f'    <tag k="boundary" v="administrative"/>',
+                      f'    <tag k="admin_level" v="2"/>',
+                      f'    <tag k="name" v="{html.escape(str(name))}"/>'
+                  ]
+
+                  way_xml = [
+                      f'  <way id="{wid}">'
+                  ]
+
+                  for ref in refs:
+                      way_xml.append(
+                          f'    <nd ref="{ref}"/>'
+                      )
+
+                  way_xml.extend(tags)
+                  way_xml.append("  </way>")
+
+                  ways.append("\n".join(way_xml))
+
+          with open("world.osm", "w", encoding="utf-8") as f:
+
+              f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+              f.write(
+                  '<osm version="0.6" generator="AlHaswa World Builder">\n'
+              )
+
+              for node in nodes:
+                  f.write(node + "\n")
+
+              for way in ways:
+                  f.write(way + "\n")
+
+              f.write("</osm>\n")
+          PY
+
+          python3 create_world_osm.py
+
+      # =========================
+      # تحويل OSM XML إلى PBF
+      # =========================
+      - name: Convert OSM to PBF
+        run: |
+          osmium cat \
+            world.osm \
+            -o world.osm.pbf \
+            --overwrite
+
+      # =========================
+      # تحميل Mapsforge Map Writer
+      # =========================
+      - name: Download Mapsforge Map Writer
+        run: |
+          wget -O mapsforge-map-writer-0.25.0.jar \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+      # =========================
+      # إنشاء مجلد الخريطة
+      # =========================
+      - name: Create output directory
+        run: |
+          mkdir -p map-output
+
+      # =========================
+      # إنشاء World.map
+      # =========================
+      - name: Generate World.map
+        run: |
+          java -Xmx4g \
+            -jar mapsforge-map-writer-0.25.0.jar \
+            --map-file=world.osm.pbf \
+            --output-dir=map-output \
+            --map-start-position=15.5527,48.5164 \
+            --map-start-zoom=2 \
+            --preferred-language=ar
+
+      # =========================
+      # التحقق
+      # =========================
+      - name: Check World.map
+        run: |
+          echo "=== WORLD MAP ==="
+          ls -lh map-output/
+
+          MAP_FILE=$(find map-output -maxdepth 1 -name "*.map" | head -n 1)
+
+          if [ -z "$MAP_FILE" ]; then
+            echo "World.map was not created."
+            exit 1
+          fi
+
+          echo "World map created:"
+          echo "$MAP_FILE"
+
+          du -h "$MAP_FILE"
+
+      # =========================
+      # رفع الخريطة
+      # =========================
+      - name: Upload World.map
+        uses: actions/upload-artifact@v4
+        with:
+          name: World-map
+          path: map-output/*.map
+          compression-level: 0
