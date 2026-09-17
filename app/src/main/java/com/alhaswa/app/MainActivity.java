@@ -48,6 +48,8 @@ public class MainActivity extends Activity {
 
     private void showHome() {
 
+        mapView = null;
+
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(background);
@@ -223,15 +225,27 @@ public class MainActivity extends Activity {
         map.setOnClickListener(v -> showMap());
 
         tide.setOnClickListener(v ->
-                Toast.makeText(this, "المد والجزر", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                        this,
+                        "المد والجزر",
+                        Toast.LENGTH_SHORT
+                ).show()
         );
 
         moon.setOnClickListener(v ->
-                Toast.makeText(this, "مراحل القمر", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                        this,
+                        "مراحل القمر",
+                        Toast.LENGTH_SHORT
+                ).show()
         );
 
         compass.setOnClickListener(v ->
-                Toast.makeText(this, "البوصلة", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                        this,
+                        "البوصلة",
+                        Toast.LENGTH_SHORT
+                ).show()
         );
 
         setContentView(scrollView);
@@ -280,14 +294,22 @@ public class MainActivity extends Activity {
         back.setGravity(Gravity.CENTER);
         back.setPadding(20, 10, 20, 10);
 
-        back.setOnClickListener(v -> showHome());
+        back.setOnClickListener(v -> {
+
+            if (mapView != null) {
+                mapView.destroyAll();
+                mapView = null;
+            }
+
+            showHome();
+        });
 
         topBar.addView(back);
 
         container.addView(topBar);
 
         // =========================
-        // الخريطة
+        // إنشاء الخريطة
         // =========================
 
         mapView = new MapView(this);
@@ -305,8 +327,23 @@ public class MainActivity extends Activity {
 
         try {
 
+            // نسخ الملف من assets إلى ذاكرة التطبيق
             File mapFile = getMapFile();
 
+            // التحقق من الملف
+            if (!mapFile.exists()) {
+                throw new Exception(
+                        "الملف غير موجود بعد النسخ"
+                );
+            }
+
+            if (mapFile.length() == 0) {
+                throw new Exception(
+                        "حجم Yemen.map يساوي صفر"
+                );
+            }
+
+            // قراءة ملف Mapsforge
             MapDataStore mapDataStore =
                     new MapFile(mapFile);
 
@@ -355,9 +392,18 @@ public class MainActivity extends Activity {
 
         } catch (Exception e) {
 
+            String error =
+                    e.getClass().getSimpleName();
+
+            if (e.getMessage() != null &&
+                    !e.getMessage().isEmpty()) {
+
+                error += ": " + e.getMessage();
+            }
+
             Toast.makeText(
                     this,
-                    "تعذر تحميل Yemen.map",
+                    "خطأ الخريطة: " + error,
                     Toast.LENGTH_LONG
             ).show();
 
@@ -366,7 +412,7 @@ public class MainActivity extends Activity {
     }
 
     // =========================
-    // نسخ Yemen.map من assets
+    // تجهيز Yemen.map
     // =========================
 
     private File getMapFile() throws Exception {
@@ -377,10 +423,14 @@ public class MainActivity extends Activity {
                         "Yemen.map"
                 );
 
-        if (mapFile.exists() && mapFile.length() > 0) {
+        // إذا كان موجودًا بالفعل
+        if (mapFile.exists() &&
+                mapFile.length() > 0) {
+
             return mapFile;
         }
 
+        // فتح الملف من assets
         InputStream input =
                 getAssets().open("Yemen.map");
 
@@ -391,7 +441,7 @@ public class MainActivity extends Activity {
 
         int length;
 
-        while ((length = input.read(buffer)) > 0) {
+        while ((length = input.read(buffer)) != -1) {
             output.write(buffer, 0, length);
         }
 
@@ -411,55 +461,123 @@ public class MainActivity extends Activity {
             String title,
             String description) {
 
-        LinearLayout card = new LinearLayout(this);
+        LinearLayout card =
+                new LinearLayout(this);
 
-        card.setOrientation(LinearLayout.VERTICAL);
+        card.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
         card.setGravity(Gravity.CENTER);
-        card.setPadding(20, 22, 20, 22);
-        card.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        card.setPadding(
+                20,
+                22,
+                20,
+                22
+        );
+
+        card.setLayoutDirection(
+                View.LAYOUT_DIRECTION_RTL
+        );
 
         GradientDrawable backgroundCard =
                 new GradientDrawable();
 
         backgroundCard.setColor(white);
+
         backgroundCard.setCornerRadius(28);
+
         backgroundCard.setStroke(
                 2,
                 Color.rgb(222, 232, 236)
         );
 
-        card.setBackground(backgroundCard);
+        card.setBackground(
+                backgroundCard
+        );
+
         card.setElevation(5);
 
-        TextView iconText = new TextView(this);
+        // الأيقونة
+        TextView iconText =
+                new TextView(this);
+
         iconText.setText(icon);
+
         iconText.setTextSize(30);
-        iconText.setGravity(Gravity.CENTER);
-        iconText.setIncludeFontPadding(true);
+
+        iconText.setGravity(
+                Gravity.CENTER
+        );
+
+        iconText.setIncludeFontPadding(
+                true
+        );
 
         card.addView(iconText);
 
-        TextView titleText = new TextView(this);
+        // اسم الوظيفة
+        TextView titleText =
+                new TextView(this);
+
         titleText.setText(title);
+
         titleText.setTextSize(21);
+
         titleText.setTextColor(dark);
-        titleText.setTypeface(null, Typeface.BOLD);
-        titleText.setGravity(Gravity.CENTER);
-        titleText.setIncludeFontPadding(true);
-        titleText.setPadding(0, 5, 0, 3);
+
+        titleText.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        titleText.setGravity(
+                Gravity.CENTER
+        );
+
+        titleText.setIncludeFontPadding(
+                true
+        );
+
+        titleText.setPadding(
+                0,
+                5,
+                0,
+                3
+        );
 
         card.addView(titleText);
 
-        TextView descriptionText = new TextView(this);
-        descriptionText.setText(description);
-        descriptionText.setTextSize(14);
-        descriptionText.setTextColor(
-                Color.rgb(105, 120, 130)
-        );
-        descriptionText.setGravity(Gravity.CENTER);
-        descriptionText.setIncludeFontPadding(true);
+        // الوصف
+        TextView descriptionText =
+                new TextView(this);
 
-        card.addView(descriptionText);
+        descriptionText.setText(
+                description
+        );
+
+        descriptionText.setTextSize(14);
+
+        descriptionText.setTextColor(
+                Color.rgb(
+                        105,
+                        120,
+                        130
+                )
+        );
+
+        descriptionText.setGravity(
+                Gravity.CENTER
+        );
+
+        descriptionText.setIncludeFontPadding(
+                true
+        );
+
+        card.addView(
+                descriptionText
+        );
 
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(
@@ -501,6 +619,7 @@ public class MainActivity extends Activity {
         if (mapView != null) {
 
             mapView.destroyAll();
+
             mapView = null;
 
             showHome();
