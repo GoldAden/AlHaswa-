@@ -11,6 +11,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.LatLong;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
@@ -388,49 +389,38 @@ public class MainActivity extends Activity {
         mainLayout.addView(card);
     }
 
-    /*
-     * نسخ خريطة جديدة باسم مختلف.
-     * هذا يمنع استخدام النسخة القديمة الموجودة
-     * في ذاكرة التطبيق.
-     */
     private File getMapFile() throws Exception {
 
         File mapFile =
                 new File(
                         getFilesDir(),
-                        "Yemen_v2.map"
+                        "Yemen.map"
                 );
 
-        if (!mapFile.exists()) {
+        InputStream input =
+                getAssets().open("Yemen.map");
 
-            InputStream input =
-                    getAssets().open(
-                            "Yemen.map"
-                    );
+        FileOutputStream output =
+                new FileOutputStream(mapFile);
 
-            FileOutputStream output =
-                    new FileOutputStream(mapFile);
+        byte[] buffer =
+                new byte[1024 * 1024];
 
-            byte[] buffer =
-                    new byte[1024 * 1024];
+        int length;
 
-            int length;
-
-            while (
-                    (length = input.read(buffer)) > 0
-            ) {
-
-                output.write(
-                        buffer,
-                        0,
-                        length
-                );
-            }
-
-            output.flush();
-            output.close();
-            input.close();
+        while (
+                (length = input.read(buffer)) > 0
+        ) {
+            output.write(
+                    buffer,
+                    0,
+                    length
+            );
         }
+
+        output.flush();
+        output.close();
+        input.close();
 
         return mapFile;
     }
@@ -474,9 +464,6 @@ public class MainActivity extends Activity {
         final MapView mapView =
                 new MapView(this);
 
-        mapView.setClickable(true);
-        mapView.setFocusable(true);
-
         layout.addView(
                 mapView,
                 new LinearLayout.LayoutParams(
@@ -494,12 +481,36 @@ public class MainActivity extends Activity {
 
         try {
 
+            /*
+             * نسخ ملف الخريطة من assets
+             */
             File mapFile =
                     getMapFile();
 
-            MapDataStore mapDataStore =
+            /*
+             * قراءة ملف Mapsforge
+             */
+            MapFile mapFileReader =
                     new MapFile(mapFile);
 
+            MapDataStore mapDataStore =
+                    mapFileReader;
+
+            /*
+             * الحصول على حدود الخريطة نفسها
+             */
+            BoundingBox bounds =
+                    mapDataStore.boundingBox();
+
+            /*
+             * مركز الخريطة الحقيقي
+             */
+            LatLong center =
+                    bounds.getCenterPoint();
+
+            /*
+             * إنشاء الكاش
+             */
             int tileSize =
                     mapView
                             .getModel()
@@ -509,13 +520,16 @@ public class MainActivity extends Activity {
             TileCache tileCache =
                     AndroidUtil.createTileCache(
                             this,
-                            "yemen-map-cache-v2",
+                            "yemen-map-cache-final",
                             tileSize,
                             2f,
                             2f
                     );
 
-            TileRendererLayer tileRendererLayer =
+            /*
+             * طبقة الرسم
+             */
+            TileRendererLayer renderer =
                     new TileRendererLayer(
                             tileCache,
                             mapDataStore,
@@ -528,6 +542,9 @@ public class MainActivity extends Activity {
                             AndroidGraphicFactory.INSTANCE
                     );
 
+            /*
+             * نظام رسم الخريطة
+             */
             XmlRenderTheme renderTheme =
                     new AssetsRenderTheme(
                             getAssets(),
@@ -536,29 +553,25 @@ public class MainActivity extends Activity {
                             null
                     );
 
-            tileRendererLayer.setXmlRenderTheme(
+            renderer.setXmlRenderTheme(
                     renderTheme
             );
 
+            /*
+             * إضافة طبقة الخريطة
+             */
             mapView
                     .getLayerManager()
                     .getLayers()
-                    .add(
-                            tileRendererLayer
-                    );
+                    .add(renderer);
 
             /*
-             * مركز اليمن
+             * وضع الخريطة في مركز بياناتها
              */
-            mapView.setCenter(
-                    new LatLong(
-                            15.5527,
-                            48.5164
-                    )
-            );
+            mapView.setCenter(center);
 
             /*
-             * مستوى مناسب لإظهار تفاصيل اليمن
+             * مستوى التكبير
              */
             mapView.setZoomLevel(
                     (byte) 8
@@ -568,7 +581,7 @@ public class MainActivity extends Activity {
 
             Toast.makeText(
                     this,
-                    "تم تحميل خريطة اليمن بدون إنترنت",
+                    "تم تحميل الخريطة بنجاح",
                     Toast.LENGTH_SHORT
             ).show();
 
@@ -576,9 +589,9 @@ public class MainActivity extends Activity {
 
             Toast.makeText(
                     this,
-                    "خطأ في تحميل الخريطة: "
+                    "خطأ الخريطة:\n"
                             + e.getClass().getSimpleName()
-                            + " - "
+                            + "\n"
                             + e.getMessage(),
                     Toast.LENGTH_LONG
             ).show();
