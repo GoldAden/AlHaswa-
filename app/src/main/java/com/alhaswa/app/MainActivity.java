@@ -41,7 +41,13 @@ public class MainActivity extends Activity {
     }
 
     private int dp(float value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+        return (int) (
+                value *
+                getResources()
+                        .getDisplayMetrics()
+                        .density
+                + 0.5f
+        );
     }
 
     private TextView textView(
@@ -64,7 +70,8 @@ public class MainActivity extends Activity {
             int color,
             float radius
     ) {
-        GradientDrawable drawable = new GradientDrawable();
+        GradientDrawable drawable =
+                new GradientDrawable();
 
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radius));
@@ -72,172 +79,23 @@ public class MainActivity extends Activity {
         return drawable;
     }
 
-    private TextView createCard(
-            String icon,
-            String title,
-            String description
-    ) {
-        LinearLayout card = new LinearLayout(this);
-
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-
-        card.setPadding(
-                dp(18),
-                dp(16),
-                dp(18),
-                dp(16)
-        );
-
-        card.setBackground(
-                background(Color.WHITE, 18)
-        );
-
-        LinearLayout.LayoutParams cardParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
-        cardParams.setMargins(
-                dp(16),
-                dp(7),
-                dp(16),
-                dp(7)
-        );
-
-        card.setLayoutParams(cardParams);
-
-        TextView iconView =
-                textView(
-                        icon,
-                        30,
-                        Color.DKGRAY,
-                        Gravity.CENTER
-                );
-
-        LinearLayout.LayoutParams iconParams =
-                new LinearLayout.LayoutParams(
-                        dp(55),
-                        dp(55)
-                );
-
-        iconView.setLayoutParams(iconParams);
-
-        card.addView(iconView);
-
-        LinearLayout texts = new LinearLayout(this);
-
-        texts.setOrientation(LinearLayout.VERTICAL);
-
-        texts.setPadding(
-                dp(12),
-                0,
-                0,
-                0
-        );
-
-        TextView titleView =
-                textView(
-                        title,
-                        20,
-                        Color.rgb(30, 30, 30),
-                        Gravity.RIGHT
-                );
-
-        titleView.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
-
-        TextView descriptionView =
-                textView(
-                        description,
-                        14,
-                        Color.rgb(100, 100, 100),
-                        Gravity.RIGHT
-                );
-
-        descriptionView.setPadding(
-                0,
-                dp(5),
-                0,
-                0
-        );
-
-        texts.addView(titleView);
-        texts.addView(descriptionView);
-
-        LinearLayout.LayoutParams textParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        1
-                );
-
-        texts.setLayoutParams(textParams);
-
-        card.addView(texts);
-
-        card.setOnClickListener(v -> {
-
-            if (title.equals("الخريطة")) {
-                showMap();
-
-            } else if (title.equals("المد والجزر")) {
-
-                Toast.makeText(
-                        MainActivity.this,
-                        "المد والجزر",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-            } else if (title.equals("مراحل القمر")) {
-
-                Toast.makeText(
-                        MainActivity.this,
-                        "مراحل القمر",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-            } else if (title.equals("البوصلة")) {
-
-                Toast.makeText(
-                        MainActivity.this,
-                        "البوصلة",
-                        Toast.LENGTH_SHORT
-                ).show();
-            }
-        });
-
-        return createCardContainer(card);
-    }
-
-    private TextView createCardContainer(
-            LinearLayout card
-    ) {
-        TextView container = new TextView(this);
-
-        container.setVisibility(View.GONE);
-
-        card.setTag(container);
-
-        return container;
-    }
-
     private void showHome() {
 
-        ScrollView scrollView = new ScrollView(this);
+        ScrollView scrollView =
+                new ScrollView(this);
 
         scrollView.setFillViewport(true);
 
-        mainLayout = new LinearLayout(this);
+        mainLayout =
+                new LinearLayout(this);
 
         mainLayout.setOrientation(
                 LinearLayout.VERTICAL
         );
 
-        mainLayout.setGravity(Gravity.CENTER_HORIZONTAL);
+        mainLayout.setGravity(
+                Gravity.CENTER_HORIZONTAL
+        );
 
         mainLayout.setPadding(
                 0,
@@ -395,7 +253,8 @@ public class MainActivity extends Activity {
             String description
     ) {
 
-        LinearLayout card = new LinearLayout(this);
+        LinearLayout card =
+                new LinearLayout(this);
 
         card.setOrientation(
                 LinearLayout.HORIZONTAL
@@ -458,7 +317,8 @@ public class MainActivity extends Activity {
         );
 
         textLayout.setGravity(
-                Gravity.CENTER_VERTICAL | Gravity.RIGHT
+                Gravity.CENTER_VERTICAL |
+                Gravity.RIGHT
         );
 
         textLayout.setPadding(
@@ -513,8 +373,11 @@ public class MainActivity extends Activity {
         card.setOnClickListener(v -> {
 
             if (title.equals("الخريطة")) {
+
                 showMap();
+
             } else {
+
                 Toast.makeText(
                         MainActivity.this,
                         title,
@@ -552,6 +415,7 @@ public class MainActivity extends Activity {
             while (
                     (length = input.read(buffer)) > 0
             ) {
+
                 output.write(
                         buffer,
                         0,
@@ -603,8 +467,14 @@ public class MainActivity extends Activity {
                 )
         );
 
-        MapView mapView =
+        final MapView mapView =
                 new MapView(this);
+
+        /*
+         * تحسين أداء الخريطة أثناء السحب
+         */
+        mapView.setClickable(true);
+        mapView.setFocusable(true);
 
         layout.addView(
                 mapView,
@@ -635,13 +505,20 @@ public class MainActivity extends Activity {
                             .displayModel
                             .getTileSize();
 
+            /*
+             * Tile Cache أكبر من السابق.
+             *
+             * هذا يسمح بالاحتفاظ بعدد أكبر
+             * من مربعات الخريطة أثناء التحريك
+             * والتكبير والتصغير.
+             */
             TileCache tileCache =
                     AndroidUtil.createTileCache(
                             this,
                             "yemen-map-cache",
                             tileSize,
-                            1f,
-                            1f
+                            2f,
+                            2f
                     );
 
             TileRendererLayer tileRendererLayer =
@@ -658,8 +535,10 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * Mapsforge 0.25.0 يحتاج إلى:
-             * AssetManager + مجلد + اسم الملف + callback
+             * Render Theme الخاص بالخريطة.
+             *
+             * Mapsforge 0.25.0
+             * يحتاج أربعة معاملات.
              */
             XmlRenderTheme renderTheme =
                     new AssetsRenderTheme(
@@ -680,6 +559,9 @@ public class MainActivity extends Activity {
                             tileRendererLayer
                     );
 
+            /*
+             * مركز الخريطة على اليمن.
+             */
             mapView.setCenter(
                     new LatLong(
                             15.5527,
@@ -687,9 +569,17 @@ public class MainActivity extends Activity {
                     )
             );
 
+            /*
+             * مستوى التكبير الابتدائي.
+             */
             mapView.setZoomLevel(
                     (byte) 6
             );
+
+            /*
+             * إعادة رسم الخريطة بعد إضافة الطبقة.
+             */
+            mapView.invalidate();
 
             Toast.makeText(
                     this,
@@ -713,6 +603,7 @@ public class MainActivity extends Activity {
 
         super.onDestroy();
 
-        AndroidGraphicFactory.clearResourceMemoryCache();
+        AndroidGraphicFactory
+                .clearResourceMemoryCache();
     }
 }
