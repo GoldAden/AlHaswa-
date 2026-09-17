@@ -316,17 +316,10 @@ public class MainActivity extends Activity {
                             AndroidGraphicFactory.INSTANCE
                     );
 
-            /*
-             * Render Theme
-             *
-             * الملف موجود داخل:
-             * assets/rendertheme/osmarender.xml
-             */
             XmlRenderTheme renderTheme =
                     new AssetsRenderTheme(
-                            this,
-                            "rendertheme/",
-                            "osmarender.xml"
+                            getAssets(),
+                            "rendertheme/osmarender.xml"
                     );
 
             tileRendererLayer.setXmlRenderTheme(
