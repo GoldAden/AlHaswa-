@@ -1,9 +1,7 @@
-name: Build Yemen Offline Vector Map
+name: Build Yemen Mapsforge Map
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * 0'
 
 permissions:
   contents: write
@@ -13,83 +11,87 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+
+      # =========================
+      # تحميل المشروع
+      # =========================
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      # =========================
+      # إعداد Java
+      # =========================
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Download Osmosis 0.47.4
+      # =========================
+      # تثبيت أدوات النظام
+      # =========================
+      - name: Install tools
         run: |
-          wget -q \
-            https://github.com/openstreetmap/osmosis/releases/download/0.47.4/osmosis-0.47.4.zip \
-            -O osmosis.zip
+          sudo apt-get update
+          sudo apt-get install -y wget unzip osmium-tool
 
-          unzip -q osmosis.zip -d osmosis
-          chmod +x osmosis/bin/osmosis
-          echo "$(pwd)/osmosis/bin" >> "$GITHUB_PATH"
-
-      - name: Install Mapsforge Map-Writer 0.30.0
-        run: |
-          mkdir -p ~/.openstreetmap/osmosis/plugins
-
-          wget -q \
-            https://github.com/mapsforge/mapsforge/releases/download/0.30.0/mapsforge-map-writer-0.30.0-jar-with-dependencies.jar \
-            -O ~/.openstreetmap/osmosis/plugins/mapsforge-map-writer-0.30.0-jar-with-dependencies.jar
-
+      # =========================
+      # تحميل بيانات اليمن من Geofabrik
+      # =========================
       - name: Download Yemen OSM data
         run: |
-          wget -q \
-            https://download.geofabrik.de/asia/yemen-latest.osm.pbf \
-            -O yemen-latest.osm.pbf
+          wget -O yemen-latest.osm.pbf \
+            https://download.geofabrik.de/asia/yemen-latest.osm.pbf
 
-          ls -lh yemen-latest.osm.pbf
-
-      - name: Convert Yemen OSM to Mapsforge Vector Map
-        env:
-          JAVACMD_OPTIONS: "-Xmx3G"
+      # =========================
+      # تحميل Mapsforge Map-Writer 0.25.0
+      # =========================
+      - name: Download Mapsforge Map-Writer 0.25.0
         run: |
-          osmosis \
-            --rb file=yemen-latest.osm.pbf \
-            --mw file=Yemen.map type=ram
+          wget -O mapsforge-map-writer-0.25.0.jar \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
 
-      - name: Put map in Android assets
+      # =========================
+      # إنشاء مجلد الإخراج
+      # =========================
+      - name: Create output directory
         run: |
-          mkdir -p app/src/main/assets
-          cp Yemen.map app/src/main/assets/Yemen.map
-          ls -lh app/src/main/assets/Yemen.map
+          mkdir -p map-output
 
-      - name: Install Git LFS
+      # =========================
+      # إنشاء Yemen.map
+      # =========================
+      - name: Generate Yemen.map
         run: |
-          git lfs install
+          java -Xmx6g -jar mapsforge-map-writer-0.25.0.jar \
+            --map-file=yemen-latest.osm.pbf \
+            --output-dir=map-output \
+            --map-start-position=15.5527,48.5164 \
+            --map-start-zoom=6 \
+            --preferred-language=ar
 
-      - name: Track Yemen.map with Git LFS
+      # =========================
+      # التحقق من الملف
+      # =========================
+      - name: Check generated map
         run: |
-          git lfs track "app/src/main/assets/Yemen.map"
-          git add .gitattributes
-          git add app/src/main/assets/Yemen.map
+          echo "=== MAP OUTPUT ==="
+          ls -lh map-output/
 
-      - name: Commit Yemen.map
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Add Yemen offline vector map"
-            git push
-          fi
-
-      - name: Verify Yemen.map
-        run: |
-          if [ ! -s app/src/main/assets/Yemen.map ]; then
-            echo "ERROR: Yemen.map was not created."
+          if [ ! -f map-output/Yemen.map ]; then
+            echo "Yemen.map was not created."
             exit 1
           fi
 
-          echo "Yemen.map is ready:"
-          ls -lh app/src/main/assets/Yemen.map
+          echo "Yemen.map created successfully."
+          du -h map-output/Yemen.map
+
+      # =========================
+      # رفع الخريطة كـ Artifact
+      # =========================
+      - name: Upload Yemen.map
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yemen-map-0.25.0
+          path: map-output/Yemen.map
+          compression-level: 0
