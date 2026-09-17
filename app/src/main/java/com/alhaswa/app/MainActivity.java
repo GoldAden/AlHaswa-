@@ -14,12 +14,14 @@ import android.widget.Toast;
 
 import org.mapsforge.core.model.LatLong;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
+import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
 import org.mapsforge.map.datastore.MapDataStore;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
+import org.mapsforge.map.rendertheme.XmlRenderTheme;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -140,6 +142,7 @@ public class MainActivity extends Activity {
         root.addView(compass);
 
         View largeSpace = new View(this);
+
         root.addView(
                 largeSpace,
                 new LinearLayout.LayoutParams(
@@ -185,15 +188,27 @@ public class MainActivity extends Activity {
         map.setOnClickListener(v -> showMap());
 
         tide.setOnClickListener(v ->
-                Toast.makeText(this, "المد والجزر", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                        this,
+                        "المد والجزر",
+                        Toast.LENGTH_SHORT
+                ).show()
         );
 
         moon.setOnClickListener(v ->
-                Toast.makeText(this, "مراحل القمر", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                        this,
+                        "مراحل القمر",
+                        Toast.LENGTH_SHORT
+                ).show()
         );
 
         compass.setOnClickListener(v ->
-                Toast.makeText(this, "البوصلة", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                        this,
+                        "البوصلة",
+                        Toast.LENGTH_SHORT
+                ).show()
         );
 
         setContentView(scrollView);
@@ -224,6 +239,7 @@ public class MainActivity extends Activity {
                         LinearLayout.LayoutParams.WRAP_CONTENT,
                         1
                 );
+
         topBar.addView(mapTitle, titleParams);
 
         TextView back = new TextView(this);
@@ -234,14 +250,17 @@ public class MainActivity extends Activity {
         back.setPadding(20, 10, 20, 10);
 
         back.setOnClickListener(v -> {
+
             if (mapView != null) {
                 mapView.destroyAll();
                 mapView = null;
             }
+
             showHome();
         });
 
         topBar.addView(back);
+
         container.addView(topBar);
 
         mapView = new MapView(this);
@@ -258,6 +277,7 @@ public class MainActivity extends Activity {
         setContentView(container);
 
         try {
+
             File mapFile = getMapFile();
 
             if (!mapFile.exists()) {
@@ -271,7 +291,10 @@ public class MainActivity extends Activity {
             MapDataStore mapDataStore =
                     new MapFile(mapFile);
 
-            int tileSize = 256;
+            int tileSize =
+                    mapView.getModel()
+                            .displayModel
+                            .getTileSize();
 
             TileCache tileCache =
                     AndroidUtil.createTileCache(
@@ -292,6 +315,23 @@ public class MainActivity extends Activity {
                             false,
                             AndroidGraphicFactory.INSTANCE
                     );
+
+            /*
+             * Render Theme
+             *
+             * الملف موجود داخل:
+             * assets/rendertheme/osmarender.xml
+             */
+            XmlRenderTheme renderTheme =
+                    new AssetsRenderTheme(
+                            this,
+                            "rendertheme/",
+                            "osmarender.xml"
+                    );
+
+            tileRendererLayer.setXmlRenderTheme(
+                    renderTheme
+            );
 
             mapView.getLayerManager()
                     .getLayers()
@@ -353,7 +393,8 @@ public class MainActivity extends Activity {
         FileOutputStream output =
                 new FileOutputStream(mapFile);
 
-        byte[] buffer = new byte[8192];
+        byte[] buffer =
+                new byte[8192];
 
         int length;
 
@@ -380,7 +421,9 @@ public class MainActivity extends Activity {
                 LinearLayout.VERTICAL
         );
 
-        card.setGravity(Gravity.CENTER);
+        card.setGravity(
+                Gravity.CENTER
+        );
 
         card.setPadding(
                 20,
@@ -415,16 +458,9 @@ public class MainActivity extends Activity {
                 new TextView(this);
 
         iconText.setText(icon);
-
         iconText.setTextSize(30);
-
-        iconText.setGravity(
-                Gravity.CENTER
-        );
-
-        iconText.setIncludeFontPadding(
-                true
-        );
+        iconText.setGravity(Gravity.CENTER);
+        iconText.setIncludeFontPadding(true);
 
         card.addView(iconText);
 
@@ -432,24 +468,14 @@ public class MainActivity extends Activity {
                 new TextView(this);
 
         titleText.setText(title);
-
         titleText.setTextSize(21);
-
         titleText.setTextColor(dark);
-
         titleText.setTypeface(
                 null,
                 Typeface.BOLD
         );
-
-        titleText.setGravity(
-                Gravity.CENTER
-        );
-
-        titleText.setIncludeFontPadding(
-                true
-        );
-
+        titleText.setGravity(Gravity.CENTER);
+        titleText.setIncludeFontPadding(true);
         titleText.setPadding(
                 0,
                 5,
@@ -462,12 +488,8 @@ public class MainActivity extends Activity {
         TextView descriptionText =
                 new TextView(this);
 
-        descriptionText.setText(
-                description
-        );
-
+        descriptionText.setText(description);
         descriptionText.setTextSize(14);
-
         descriptionText.setTextColor(
                 Color.rgb(
                         105,
@@ -480,9 +502,7 @@ public class MainActivity extends Activity {
                 Gravity.CENTER
         );
 
-        descriptionText.setIncludeFontPadding(
-                true
-        );
+        descriptionText.setIncludeFontPadding(true);
 
         card.addView(
                 descriptionText
