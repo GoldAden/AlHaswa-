@@ -1,0 +1,213 @@
+name: Build World Mapsforge Map
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-world-map:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # =========================
+      # تحميل المشروع
+      # =========================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # =========================
+      # Java 17
+      # =========================
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # =========================
+      # أدوات النظام
+      # =========================
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            wget \
+            unzip \
+            python3 \
+            python3-pip \
+            osmium-tool \
+            gdal-bin
+
+      # =========================
+      # تثبيت ogr2osm
+      # =========================
+      - name: Install ogr2osm
+        run: |
+          python3 -m pip install --break-system-packages \
+            git+https://github.com/roelderickx/ogr2osm.git
+
+      # =========================
+      # تحميل بيانات اليابسة المبسطة
+      # =========================
+      - name: Download simplified land polygons
+        run: |
+          wget -q -O land.zip \
+            https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
+
+          mkdir -p land
+          unzip -q land.zip -d land
+
+      # =========================
+      # تحميل حدود الدول
+      # =========================
+      - name: Download Natural Earth countries
+        run: |
+          wget -q -O countries.zip \
+            https://naturalearth.s3.amazonaws.com/5.1.2/110m_cultural/ne_110m_admin_0_countries.zip
+
+          mkdir -p countries
+          unzip -q countries.zip -d countries
+
+      # =========================
+      # إنشاء Translation Script
+      # =========================
+      - name: Create Natural Earth translation
+        run: |
+          cat > ne_countries.py <<'PY'
+          def filterTags(attrs, layerName, ogrGeometry):
+              tags = {}
+
+              name = attrs.get("ADMIN")
+              iso = attrs.get("ISO_A3")
+
+              if name:
+                  tags["name"] = str(name)
+
+              if iso and iso != "-99":
+                  tags["ISO3166-1:alpha3"] = str(iso)
+
+              tags["boundary"] = "administrative"
+              tags["admin_level"] = "2"
+
+              return tags
+          PY
+
+      # =========================
+      # تحديد ملف اليابسة
+      # =========================
+      - name: Find land shapefile
+        run: |
+          LAND_SHP=$(find land -type f -name "*.shp" | head -n 1)
+
+          if [ -z "$LAND_SHP" ]; then
+            echo "Land shapefile not found."
+            exit 1
+          fi
+
+          echo "LAND_SHP=$LAND_SHP" >> "$GITHUB_ENV"
+
+      # =========================
+      # تحويل اليابسة إلى OSM
+      # =========================
+      - name: Convert land polygons to OSM
+        run: |
+          ogr2osm \
+            "$LAND_SHP" \
+            -o land.osm \
+            --add-tag natural=land
+
+      # =========================
+      # تحويل حدود الدول إلى OSM
+      # =========================
+      - name: Convert countries to OSM
+        run: |
+          ogr2osm \
+            countries/ne_110m_admin_0_countries.shp \
+            -o countries.osm \
+            --translation ne_countries.py
+
+      # =========================
+      # دمج البيانات
+      # =========================
+      - name: Merge world OSM data
+        run: |
+          osmium cat \
+            land.osm \
+            countries.osm \
+            -o world-merged.osm.pbf \
+            --overwrite
+
+      # =========================
+      # إعادة ترقيم العناصر
+      # لمنع تعارض IDs
+      # =========================
+      - name: Renumber world data
+        run: |
+          osmium renumber \
+            world-merged.osm.pbf \
+            -o world.osm.pbf \
+            --overwrite
+
+      # =========================
+      # تحميل Mapsforge Map Writer
+      # =========================
+      - name: Download Mapsforge Map Writer 0.25.0
+        run: |
+          wget -O mapsforge-map-writer-0.25.0.jar \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+      # =========================
+      # إنشاء مجلد الإخراج
+      # =========================
+      - name: Create output directory
+        run: |
+          mkdir -p map-output
+
+      # =========================
+      # إنشاء World.map
+      # =========================
+      - name: Generate World.map
+        run: |
+          java -Xmx6g \
+            -jar mapsforge-map-writer-0.25.0.jar \
+            --map-file=world.osm.pbf \
+            --output-dir=map-output \
+            --map-start-position=15,45 \
+            --map-start-zoom=2 \
+            --preferred-language=en
+
+      # =========================
+      # التحقق
+      # =========================
+      - name: Check World.map
+        run: |
+          echo "=============================="
+          echo "WORLD MAP OUTPUT"
+          echo "=============================="
+
+          ls -lh map-output/
+
+          MAP_FILE=$(find map-output -maxdepth 1 -type f -name "*.map" | head -n 1)
+
+          if [ -z "$MAP_FILE" ]; then
+            echo "ERROR: World.map was not created."
+            exit 1
+          fi
+
+          echo "World map created successfully:"
+          echo "$MAP_FILE"
+
+          du -h "$MAP_FILE"
+
+      # =========================
+      # رفع World.map
+      # =========================
+      - name: Upload World.map
+        uses: actions/upload-artifact@v4
+        with:
+          name: World-map-0.25.0
+          path: map-output/*.map
+          compression-level: 0
