@@ -14,3 +14,9 @@ android {
         versionName '1.0'
     }
 }
+
+dependencies {
+    implementation 'org.mapsforge:mapsforge-map-android:0.30.0'
+    implementation 'org.mapsforge:mapsforge-map-reader:0.30.0'
+    implementation 'org.mapsforge:mapsforge-core:0.30.0'
+}
