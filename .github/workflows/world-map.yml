@@ -34,16 +34,20 @@ jobs:
           cat > work/tag-mapping.xml << 'XML'
           <?xml version="1.0" encoding="UTF-8"?>
           <tag-mapping>
-            <osm-tag key="natural" value="background" zoom-appear="0"/>
-            <osm-tag key="place" value="city" zoom-appear="0"/>
-            <osm-tag key="name" value="*" zoom-appear="0"/>
+            <pois>
+              <osm-tag key="place" value="city" zoom-appear="0"/>
+              <osm-tag key="name" value="*" zoom-appear="0"/>
+            </pois>
+            <ways>
+              <osm-tag key="natural" value="background" zoom-appear="0"/>
+            </ways>
           </tag-mapping>
           XML
           OSMOSIS_BIN=$(find . -type f -name osmosis | head -n 1)
           chmod +x "$OSMOSIS_BIN"
-          cat work/tag-mapping.xml
-          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2 --log-progress
+          "$OSMOSIS_BIN" --rx file=work/world.osm --mw file=work/World.map tag-conf-file=work/tag-mapping.xml bbox=-180,-85,180,85 map-start-position=15,45 map-start-zoom=2
           ls -lh work/World.map
+          echo "SUCCESS"
 
       - name: Upload
         uses: actions/upload-artifact@v4
