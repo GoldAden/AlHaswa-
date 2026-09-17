@@ -20,7 +20,6 @@ import org.mapsforge.map.datastore.MapDataStore;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
-import org.mapsforge.map.rendertheme.InternalRenderTheme;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -248,7 +247,10 @@ public class MainActivity extends Activity {
         container.setOrientation(LinearLayout.VERTICAL);
         container.setBackgroundColor(Color.WHITE);
 
-        // شريط علوي
+        // =========================
+        // الشريط العلوي
+        // =========================
+
         LinearLayout topBar = new LinearLayout(this);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setPadding(12, 10, 12, 10);
@@ -285,7 +287,7 @@ public class MainActivity extends Activity {
         container.addView(topBar);
 
         // =========================
-        // MapView
+        // الخريطة
         // =========================
 
         mapView = new MapView(this);
@@ -330,15 +332,11 @@ public class MainActivity extends Activity {
                             AndroidGraphicFactory.INSTANCE
                     );
 
-            tileRendererLayer.setXmlRenderTheme(
-                    InternalRenderTheme.DEFAULT
-            );
-
             mapView.getLayerManager()
                     .getLayers()
                     .add(tileRendererLayer);
 
-            // مركز اليمن تقريبًا
+            // مركز اليمن
             mapView.setCenter(
                     new LatLong(
                             15.5527,
@@ -346,7 +344,7 @@ public class MainActivity extends Activity {
                     )
             );
 
-            // مستوى التكبير الأول
+            // التكبير الأولي
             mapView.setZoomLevel((byte) 6);
 
             Toast.makeText(
@@ -368,7 +366,7 @@ public class MainActivity extends Activity {
     }
 
     // =========================
-    // تجهيز Yemen.map
+    // نسخ Yemen.map من assets
     // =========================
 
     private File getMapFile() throws Exception {
@@ -433,7 +431,6 @@ public class MainActivity extends Activity {
         card.setBackground(backgroundCard);
         card.setElevation(5);
 
-        // الأيقونة
         TextView iconText = new TextView(this);
         iconText.setText(icon);
         iconText.setTextSize(30);
@@ -442,7 +439,6 @@ public class MainActivity extends Activity {
 
         card.addView(iconText);
 
-        // اسم الوظيفة
         TextView titleText = new TextView(this);
         titleText.setText(title);
         titleText.setTextSize(21);
@@ -454,7 +450,6 @@ public class MainActivity extends Activity {
 
         card.addView(titleText);
 
-        // الوصف
         TextView descriptionText = new TextView(this);
         descriptionText.setText(description);
         descriptionText.setTextSize(14);
@@ -497,7 +492,7 @@ public class MainActivity extends Activity {
     }
 
     // =========================
-    // إغلاق الخريطة بزر الرجوع
+    // زر الرجوع
     // =========================
 
     @Override
@@ -506,7 +501,6 @@ public class MainActivity extends Activity {
         if (mapView != null) {
 
             mapView.destroyAll();
-
             mapView = null;
 
             showHome();
