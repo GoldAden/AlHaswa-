@@ -1,51 +1,96 @@
-name: Test Mapsforge Map Writer
+name: Build World Mapsforge Map
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  test:
+  build-world-map:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Download Mapsforge Map Writer 0.25.0
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip osmium-tool
+
+      - name: Download Osmosis 0.48.3
+        run: |
+          wget -O osmosis.zip \
+            https://github.com/openstreetmap/osmosis/releases/download/0.48.3/osmosis-0.48.3.zip
+
+          unzip -q osmosis.zip -d osmosis
+
+          chmod +x osmosis/bin/osmosis
+
+      - name: Download World OSM data
+        run: |
+          wget -O planet-coastlines.osm.pbf \
+            https://osmdata.openstreetmap.de/download/planet-coastlines-latest.osm.pbf
+
+      - name: Download Natural Earth countries
+        run: |
+          wget -O countries.zip \
+            https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
+
+          unzip -q countries.zip -d countries
+
+      - name: Download Mapsforge Map Writer
         run: |
           wget -O mapsforge-map-writer.jar \
             https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
 
-      - name: Inspect Map Writer
+      - name: Install Mapsforge plugin
         run: |
-          echo "=== JAR CONTENT ==="
+          cp mapsforge-map-writer.jar osmosis/lib/default/
 
-          jar tf mapsforge-map-writer.jar \
-            | grep -E "osmosis|MapFileWriter|MapWriter" \
-            | head -n 100
-
-      - name: Check Manifest
+      - name: Prepare output
         run: |
-          echo "=== MANIFEST ==="
+          mkdir -p map-output
 
-          unzip -p mapsforge-map-writer.jar META-INF/MANIFEST.MF || true
-
-      - name: Find Osmosis classes
+      - name: Check Osmosis Mapsforge plugin
         run: |
-          echo "=== OSMOSIS CLASSES ==="
+          osmosis/bin/osmosis --help | head -100
 
-          jar tf mapsforge-map-writer.jar \
-            | grep -i "osmosis" \
-            | head -n 100
-
-      - name: Find Map Writer classes
+      - name: Generate World map
         run: |
-          echo "=== MAP WRITER CLASSES ==="
+          osmosis/bin/osmosis \
+            --read-pbf file=planet-coastlines.osm.pbf \
+            --mapfile-writer \
+            file=map-output/World.map \
+            map-start-position=15,45 \
+            map-start-zoom=2 \
+            bbox=-180,-85,180,85 \
+            preferred-languages=en \
+            zoom-interval-config=0,0,5,6,6,10,10,14
 
-          jar tf mapsforge-map-writer.jar \
-            | grep "org/mapsforge/map/writer" \
-            | head -n 100
+      - name: Check World.map
+        run: |
+          echo "===== WORLD MAP ====="
+          ls -lh map-output/
+
+          if [ ! -f map-output/World.map ]; then
+            echo "World.map was not created."
+            exit 1
+          fi
+
+          echo "World.map created successfully."
+          du -h map-output/World.map
+
+      - name: Upload World.map
+        uses: actions/upload-artifact@v4
+        with:
+          name: World-map
+          path: map-output/World.map
+          compression-level: 0
