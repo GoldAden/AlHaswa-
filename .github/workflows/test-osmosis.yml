@@ -1,4 +1,4 @@
-name: Inspect Mapsforge Writer Options
+name: Inspect Mapsforge Command
 
 on:
   workflow_dispatch:
@@ -19,18 +19,18 @@ jobs:
           wget -O mapsforge-map-writer.jar \
             https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
 
-      - name: Inspect Factory
+      - name: Inspect Plugin Command
         run: |
-          echo "===== FACTORY ====="
-          javap -classpath mapsforge-map-writer.jar \
+          echo "===== PLUGIN LOADER CODE ====="
+          javap -classpath mapsforge-map-writer.jar -c -p \
+            org.mapsforge.map.writer.osmosis.MapFileWriterPluginLoader
+
+          echo ""
+          echo "===== FACTORY CODE ====="
+          javap -classpath mapsforge-map-writer.jar -c -p \
             org.mapsforge.map.writer.osmosis.MapFileWriterFactory
 
           echo ""
-          echo "===== TASK ====="
-          javap -classpath mapsforge-map-writer.jar \
+          echo "===== TASK CODE ====="
+          javap -classpath mapsforge-map-writer.jar -c -p \
             org.mapsforge.map.writer.osmosis.MapFileWriterTask
-
-          echo ""
-          echo "===== PLUGIN LOADER ====="
-          javap -classpath mapsforge-map-writer.jar \
-            org.mapsforge.map.writer.osmosis.MapFileWriterPluginLoader
