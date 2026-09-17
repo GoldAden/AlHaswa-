@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -17,7 +16,10 @@ import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
+
 import org.mapsforge.map.datastore.MapDataStore;
+import org.mapsforge.map.datastore.MultiMapDataStore;
+
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
@@ -389,20 +391,23 @@ public class MainActivity extends Activity {
         mainLayout.addView(card);
     }
 
-    private File getMapFile() throws Exception {
+    /*
+     * نسخ ملف Map من Assets إلى مساحة التطبيق الداخلية.
+     */
+    private File copyAssetToInternal(
+            String assetName
+    ) throws Exception {
 
         File mapFile =
                 new File(
                         getFilesDir(),
-                        "Yemen.map"
+                        assetName
                 );
 
         if (!mapFile.exists()) {
 
             InputStream input =
-                    getAssets().open(
-                            "Yemen.map"
-                    );
+                    getAssets().open(assetName);
 
             FileOutputStream output =
                     new FileOutputStream(mapFile);
@@ -429,6 +434,57 @@ public class MainActivity extends Activity {
         }
 
         return mapFile;
+    }
+
+    /*
+     * تحميل خريطة اليمن + خريطة العالم.
+     */
+    private MapDataStore getCombinedMap()
+            throws Exception {
+
+        File yemenFile =
+                copyAssetToInternal(
+                        "Yemen.map"
+                );
+
+        File worldFile =
+                copyAssetToInternal(
+                        "world.map"
+                );
+
+        MapFile yemenMap =
+                new MapFile(yemenFile);
+
+        MapFile worldMap =
+                new MapFile(worldFile);
+
+        /*
+         * RETURN_FIRST:
+         *
+         * نضع Yemen.map أولاً.
+         *
+         * عندما تكون المنطقة داخل اليمن،
+         * يتم استخدام Yemen.map التفصيلية.
+         *
+         * وعندما تكون خارج نطاق Yemen.map،
+         * يتم استخدام world.map.
+         */
+        MultiMapDataStore multiMapDataStore =
+                new MultiMapDataStore(
+                        MapDataStore.DataPolicy.RETURN_FIRST
+                );
+
+        multiMapDataStore.addMapDataStore(
+                yemenMap,
+                false
+        );
+
+        multiMapDataStore.addMapDataStore(
+                worldMap,
+                false
+        );
+
+        return multiMapDataStore;
     }
 
     private void showMap() {
@@ -470,9 +526,6 @@ public class MainActivity extends Activity {
         final MapView mapView =
                 new MapView(this);
 
-        /*
-         * تحسين أداء الخريطة أثناء السحب
-         */
         mapView.setClickable(true);
         mapView.setFocusable(true);
 
@@ -493,11 +546,14 @@ public class MainActivity extends Activity {
 
         try {
 
-            File mapFile =
-                    getMapFile();
-
+            /*
+             * تحميل الخريطتين:
+             *
+             * Yemen.map
+             * world.map
+             */
             MapDataStore mapDataStore =
-                    new MapFile(mapFile);
+                    getCombinedMap();
 
             int tileSize =
                     mapView
@@ -505,17 +561,10 @@ public class MainActivity extends Activity {
                             .displayModel
                             .getTileSize();
 
-            /*
-             * Tile Cache أكبر من السابق.
-             *
-             * هذا يسمح بالاحتفاظ بعدد أكبر
-             * من مربعات الخريطة أثناء التحريك
-             * والتكبير والتصغير.
-             */
             TileCache tileCache =
                     AndroidUtil.createTileCache(
                             this,
-                            "yemen-map-cache",
+                            "world-yemen-map-cache",
                             tileSize,
                             2f,
                             2f
@@ -535,10 +584,9 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * Render Theme الخاص بالخريطة.
+             * Render Theme
              *
              * Mapsforge 0.25.0
-             * يحتاج أربعة معاملات.
              */
             XmlRenderTheme renderTheme =
                     new AssetsRenderTheme(
@@ -560,7 +608,7 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * مركز الخريطة على اليمن.
+             * نبدأ من اليمن.
              */
             mapView.setCenter(
                     new LatLong(
@@ -570,24 +618,23 @@ public class MainActivity extends Activity {
             );
 
             /*
-             * مستوى التكبير الابتدائي.
+             * تكبير مناسب لليمن.
              */
             mapView.setZoomLevel(
                     (byte) 6
             );
 
-            /*
-             * إعادة رسم الخريطة بعد إضافة الطبقة.
-             */
             mapView.invalidate();
 
             Toast.makeText(
                     this,
-                    "تم تحميل خريطة اليمن بدون إنترنت",
+                    "تم تحميل خريطة العالم واليمن بدون إنترنت",
                     Toast.LENGTH_SHORT
             ).show();
 
         } catch (Exception e) {
+
+            e.printStackTrace();
 
             Toast.makeText(
                     this,
