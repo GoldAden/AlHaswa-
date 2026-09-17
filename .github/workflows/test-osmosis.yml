@@ -1,0 +1,48 @@
+name: Test Osmosis Mapsforge
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download Osmosis
+        run: |
+          wget -O osmosis.zip \
+            https://bretth.dev.openstreetmap.org/osmosis-build/osmosis-latest.zip
+
+          unzip -q osmosis.zip -d osmosis
+
+      - name: Download Mapsforge Map Writer
+        run: |
+          wget -O mapsforge-map-writer.jar \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+      - name: Install Mapsforge plugin
+        run: |
+          mkdir -p osmosis/lib/default
+          cp mapsforge-map-writer.jar osmosis/lib/default/
+
+      - name: Check Osmosis
+        run: |
+          chmod +x osmosis/bin/osmosis
+          osmosis/bin/osmosis --help
+
+      - name: Check Mapsforge plugin
+        run: |
+          echo "=== MAPSFORGE PLUGIN ==="
+          unzip -p mapsforge-map-writer.jar osmosis-plugins.conf
+          echo ""
+          echo "=== OSMOSIS LIBRARY ==="
+          ls -lh osmosis/lib/default/
