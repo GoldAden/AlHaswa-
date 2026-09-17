@@ -20,7 +20,7 @@ jobs:
       - name: Download Osmosis
         run: |
           wget -O osmosis.zip \
-            https://bretth.dev.openstreetmap.org/osmosis-build/osmosis-latest.zip
+            https://github.com/openstreetmap/osmosis/releases/latest/download/osmosis.zip
 
           unzip -q osmosis.zip -d osmosis
 
@@ -43,6 +43,7 @@ jobs:
         run: |
           echo "=== MAPSFORGE PLUGIN ==="
           unzip -p mapsforge-map-writer.jar osmosis-plugins.conf
+
           echo ""
           echo "=== OSMOSIS LIBRARY ==="
           ls -lh osmosis/lib/default/
