@@ -12,15 +12,42 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.mapsforge.core.model.LatLong;
+import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
+import org.mapsforge.map.android.util.AndroidUtil;
+import org.mapsforge.map.android.view.MapView;
+import org.mapsforge.map.datastore.MapDataStore;
+import org.mapsforge.map.layer.cache.TileCache;
+import org.mapsforge.map.layer.renderer.TileRendererLayer;
+import org.mapsforge.map.reader.MapFile;
+import org.mapsforge.map.rendertheme.InternalRenderTheme;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+
 public class MainActivity extends Activity {
 
     int dark = Color.rgb(18, 48, 65);
     int white = Color.WHITE;
     int background = Color.rgb(244, 248, 250);
 
+    private MapView mapView;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        AndroidGraphicFactory.createInstance(getApplication());
+
+        showHome();
+    }
+
+    // =========================
+    // الواجهة الرئيسية
+    // =========================
+
+    private void showHome() {
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
@@ -167,23 +194,24 @@ public class MainActivity extends Activity {
         status.setIncludeFontPadding(true);
 
         bottom.addView(status);
-TextView credit = new TextView(this);
-credit.setText("تم تصميم هذا التطبيق من قبل أصيل صادق");
-credit.setTextSize(12);
-credit.setTextColor(Color.rgb(100, 115, 125));
-credit.setGravity(Gravity.CENTER);
-credit.setPadding(0, 4, 0, 2);
-credit.setIncludeFontPadding(true);
 
-bottom.addView(credit);
+        TextView credit = new TextView(this);
+        credit.setText("تم تصميم هذا التطبيق من قبل أصيل صادق");
+        credit.setTextSize(12);
+        credit.setTextColor(Color.rgb(100, 115, 125));
+        credit.setGravity(Gravity.CENTER);
+        credit.setPadding(0, 4, 0, 2);
+        credit.setIncludeFontPadding(true);
 
-TextView version = new TextView(this);
-version.setText("الإصدار 1.0");
-version.setTextSize(12);
-version.setTextColor(Color.rgb(120, 135, 145));
-version.setGravity(Gravity.CENTER);
-version.setPadding(0, 6, 0, 5);
-version.setIncludeFontPadding(true);
+        bottom.addView(credit);
+
+        TextView version = new TextView(this);
+        version.setText("الإصدار 1.0");
+        version.setTextSize(12);
+        version.setTextColor(Color.rgb(120, 135, 145));
+        version.setGravity(Gravity.CENTER);
+        version.setPadding(0, 6, 0, 5);
+        version.setIncludeFontPadding(true);
 
         bottom.addView(version);
 
@@ -193,9 +221,7 @@ version.setIncludeFontPadding(true);
         // الضغط على البطاقات
         // =========================
 
-        map.setOnClickListener(v ->
-                Toast.makeText(this, "الخريطة", Toast.LENGTH_SHORT).show()
-        );
+        map.setOnClickListener(v -> showMap());
 
         tide.setOnClickListener(v ->
                 Toast.makeText(this, "المد والجزر", Toast.LENGTH_SHORT).show()
@@ -210,6 +236,172 @@ version.setIncludeFontPadding(true);
         );
 
         setContentView(scrollView);
+    }
+
+    // =========================
+    // فتح الخريطة
+    // =========================
+
+    private void showMap() {
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setBackgroundColor(Color.WHITE);
+
+        // شريط علوي
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setPadding(12, 10, 12, 10);
+        topBar.setBackgroundColor(Color.rgb(7, 55, 78));
+        topBar.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        TextView mapTitle = new TextView(this);
+        mapTitle.setText("🗺️ خريطة اليمن");
+        mapTitle.setTextSize(19);
+        mapTitle.setTextColor(Color.WHITE);
+        mapTitle.setTypeface(null, Typeface.BOLD);
+        mapTitle.setGravity(Gravity.CENTER);
+
+        LinearLayout.LayoutParams titleParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1
+                );
+
+        topBar.addView(mapTitle, titleParams);
+
+        TextView back = new TextView(this);
+        back.setText("رجوع");
+        back.setTextSize(15);
+        back.setTextColor(Color.WHITE);
+        back.setGravity(Gravity.CENTER);
+        back.setPadding(20, 10, 20, 10);
+
+        back.setOnClickListener(v -> showHome());
+
+        topBar.addView(back);
+
+        container.addView(topBar);
+
+        // =========================
+        // MapView
+        // =========================
+
+        mapView = new MapView(this);
+
+        container.addView(
+                mapView,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        0,
+                        1
+                )
+        );
+
+        setContentView(container);
+
+        try {
+
+            File mapFile = getMapFile();
+
+            MapDataStore mapDataStore =
+                    new MapFile(mapFile);
+
+            int tileSize = 256;
+
+            TileCache tileCache =
+                    AndroidUtil.createTileCache(
+                            this,
+                            "yemen-map-cache",
+                            tileSize,
+                            1f,
+                            1f
+                    );
+
+            TileRendererLayer tileRendererLayer =
+                    new TileRendererLayer(
+                            tileCache,
+                            mapDataStore,
+                            mapView.getModel().mapViewPosition,
+                            false,
+                            true,
+                            false,
+                            AndroidGraphicFactory.INSTANCE
+                    );
+
+            tileRendererLayer.setXmlRenderTheme(
+                    InternalRenderTheme.DEFAULT
+            );
+
+            mapView.getLayerManager()
+                    .getLayers()
+                    .add(tileRendererLayer);
+
+            // مركز اليمن تقريبًا
+            mapView.setCenter(
+                    new LatLong(
+                            15.5527,
+                            48.5164
+                    )
+            );
+
+            // مستوى التكبير الأول
+            mapView.setZoomLevel((byte) 6);
+
+            Toast.makeText(
+                    this,
+                    "تم تحميل خريطة اليمن بدون إنترنت",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+        } catch (Exception e) {
+
+            Toast.makeText(
+                    this,
+                    "تعذر تحميل Yemen.map",
+                    Toast.LENGTH_LONG
+            ).show();
+
+            e.printStackTrace();
+        }
+    }
+
+    // =========================
+    // تجهيز Yemen.map
+    // =========================
+
+    private File getMapFile() throws Exception {
+
+        File mapFile =
+                new File(
+                        getFilesDir(),
+                        "Yemen.map"
+                );
+
+        if (mapFile.exists() && mapFile.length() > 0) {
+            return mapFile;
+        }
+
+        InputStream input =
+                getAssets().open("Yemen.map");
+
+        FileOutputStream output =
+                new FileOutputStream(mapFile);
+
+        byte[] buffer = new byte[8192];
+
+        int length;
+
+        while ((length = input.read(buffer)) > 0) {
+            output.write(buffer, 0, length);
+        }
+
+        output.flush();
+        output.close();
+        input.close();
+
+        return mapFile;
     }
 
     // =========================
@@ -228,7 +420,9 @@ version.setIncludeFontPadding(true);
         card.setPadding(20, 22, 20, 22);
         card.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
-        GradientDrawable backgroundCard = new GradientDrawable();
+        GradientDrawable backgroundCard =
+                new GradientDrawable();
+
         backgroundCard.setColor(white);
         backgroundCard.setCornerRadius(28);
         backgroundCard.setStroke(
@@ -248,7 +442,7 @@ version.setIncludeFontPadding(true);
 
         card.addView(iconText);
 
-        // اسم الوظيفة - أكبر
+        // اسم الوظيفة
         TextView titleText = new TextView(this);
         titleText.setText(title);
         titleText.setTextSize(21);
@@ -260,7 +454,7 @@ version.setIncludeFontPadding(true);
 
         card.addView(titleText);
 
-        // الوصف - أصغر
+        // الوصف
         TextView descriptionText = new TextView(this);
         descriptionText.setText(description);
         descriptionText.setTextSize(14);
@@ -300,5 +494,26 @@ version.setIncludeFontPadding(true);
                         height
                 )
         );
+    }
+
+    // =========================
+    // إغلاق الخريطة بزر الرجوع
+    // =========================
+
+    @Override
+    public void onBackPressed() {
+
+        if (mapView != null) {
+
+            mapView.destroyAll();
+
+            mapView = null;
+
+            showHome();
+
+        } else {
+
+            super.onBackPressed();
+        }
     }
 }
