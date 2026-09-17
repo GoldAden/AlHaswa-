@@ -41,9 +41,9 @@ jobs:
           mkdir -p map-output
           mkdir -p tools
 
-      # ==========================================
-      # LAND
-      # ==========================================
+      # ==================================================
+      # WORLD LAND
+      # ==================================================
 
       - name: Download world land polygons
         run: |
@@ -76,9 +76,9 @@ jobs:
             "$LAND_SHP" \
             -o world-land.osm
 
-      # ==========================================
+      # ==================================================
       # NATURAL EARTH COUNTRIES
-      # ==========================================
+      # ==================================================
 
       - name: Download Natural Earth countries
         run: |
@@ -100,10 +100,12 @@ jobs:
               tags = {}
 
               name = attrs.get("NAME")
+
               if name:
                   tags["name"] = str(name)
 
               iso = attrs.get("ISO_A2")
+
               if iso and iso != "-99":
                   tags["ISO3166-1"] = str(iso)
 
@@ -137,16 +139,58 @@ jobs:
             -o world-countries.osm \
             -t tools/ne_countries.py
 
-      # ==========================================
-      # CREATE ONE OSM FILE
-      # ==========================================
+      # ==================================================
+      # ADD LAND TAGS
+      # ==================================================
 
-      - name: Combine land and countries
+      - name: Add land tags
         run: |
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
 
-          land_tree = ET.parse("world-land.osm")
+          input_file = "world-land.osm"
+          output_file = "world-land-tagged.osm"
+
+          tree = ET.parse(input_file)
+          root = tree.getroot()
+
+          for way in root.findall("way"):
+              has_natural = False
+
+              for tag in way.findall("tag"):
+                  if tag.attrib.get("k") == "natural":
+                      has_natural = True
+                      break
+
+              if not has_natural:
+                  ET.SubElement(
+                      way,
+                      "tag",
+                      {
+                          "k": "natural",
+                          "v": "land"
+                      }
+                  )
+
+          tree.write(
+              output_file,
+              encoding="UTF-8",
+              xml_declaration=True
+          )
+
+          print("Land tags added successfully.")
+          PY
+
+      # ==================================================
+      # CREATE ONE WORLD OSM FILE
+      # ==================================================
+
+      - name: Combine world data
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          land_tree = ET.parse("world-land-tagged.osm")
           land_root = land_tree.getroot()
 
           country_tree = ET.parse("world-countries.osm")
@@ -162,25 +206,24 @@ jobs:
 
           used_ids = set()
 
-          # Copy land nodes
+          # Land nodes
           for node in land_root.findall("node"):
-              node_id = int(node.attrib["id"])
+              old_id = node.attrib["id"]
 
-              if node_id not in used_ids:
-                  used_ids.add(node_id)
+              if old_id not in used_ids:
+                  used_ids.add(old_id)
                   output_root.append(node)
 
-          # Copy land ways
+          # Land ways
           for way in land_root.findall("way"):
-              way_id = int(way.attrib["id"])
+              old_id = way.attrib["id"]
 
-              if way_id not in used_ids:
-                  used_ids.add(way_id)
+              if old_id not in used_ids:
+                  used_ids.add(old_id)
                   output_root.append(way)
 
-          # Copy country nodes with new negative IDs
+          # Country nodes
           next_id = -1
-
           country_id_map = {}
 
           for node in country_root.findall("node"):
@@ -190,16 +233,14 @@ jobs:
               next_id -= 1
 
               country_id_map[old_id] = new_id
-
               node.attrib["id"] = new_id
+
               output_root.append(node)
 
-          # Copy country ways and rewrite node references
+          # Country ways
           for way in country_root.findall("way"):
-              new_way_id = str(next_id)
+              way.attrib["id"] = str(next_id)
               next_id -= 1
-
-              way.attrib["id"] = new_way_id
 
               for nd in way.findall("nd"):
                   old_ref = nd.attrib["ref"]
@@ -217,13 +258,13 @@ jobs:
               xml_declaration=True
           )
 
-          print("Combined world.osm created.")
-          print("Elements:", len(output_root))
+          print("world.osm created successfully.")
+          print("Total elements:", len(output_root))
           PY
 
-      # ==========================================
-      # CONVERT ONE OSM FILE TO PBF
-      # ==========================================
+      # ==================================================
+      # OSM → PBF
+      # ==================================================
 
       - name: Convert world OSM to PBF
         run: |
@@ -232,10 +273,6 @@ jobs:
             -o world.pbf \
             -f pbf
 
-      # ==========================================
-      # CHECK WORLD PBF
-      # ==========================================
-
       - name: Check world PBF
         run: |
           ls -lh world.osm
@@ -243,41 +280,78 @@ jobs:
 
           osmium fileinfo world.pbf
 
-      # ==========================================
-      # MAPSFORGE
-      # ==========================================
+      # ==================================================
+      # MAPSFORGE MAP WRITER
+      # ==================================================
 
-      - name: Download Mapsforge Map Writer 0.25.0
+      - name: Download Mapsforge Map Writer
         run: |
           wget -O mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
             https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
 
           ls -lh mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
 
-      - name: Verify Map Writer
+      # ==================================================
+      # CHECK JAR
+      # ==================================================
+
+      - name: Inspect Map Writer
         run: |
-          file mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+          echo "=== MAP WRITER CLASSES ==="
 
           jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
-            | head -n 20
+            | grep -E 'MapFileWriter|MapWriter|Main' \
+            | head -n 100
 
-      # ==========================================
-      # GENERATE WORLDMAP
-      # ==========================================
+      # ==================================================
+      # FIND MAIN CLASS
+      # ==================================================
+
+      - name: Find Map Writer class
+        run: |
+          CLASS=$(jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            | grep 'MapFileWriter.class' \
+            | head -n 1 \
+            | sed 's|/|.|g' \
+            | sed 's|.class$||')
+
+          if [ -z "$CLASS" ]; then
+            echo "MapFileWriter.class was not found."
+
+            echo "Available writer classes:"
+            jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+              | grep -i writer \
+              | head -n 100
+
+            exit 1
+          fi
+
+          echo "MAP_WRITER_CLASS=$CLASS" >> "$GITHUB_ENV"
+
+          echo "Found Map Writer class:"
+          echo "$CLASS"
+
+      # ==================================================
+      # GENERATE WORLD MAP
+      # ==================================================
 
       - name: Generate World.map
         run: |
+          echo "Using:"
+          echo "$MAP_WRITER_CLASS"
+
           java -Xmx6g \
-            -jar mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            -cp "mapsforge-map-writer-0.25.0-jar-with-dependencies.jar" \
+            "$MAP_WRITER_CLASS" \
             --map-file=world.pbf \
             --output-dir=map-output \
             --map-start-position=15,45 \
             --map-start-zoom=2 \
             --preferred-language=en
 
-      # ==========================================
+      # ==================================================
       # CHECK RESULT
-      # ==========================================
+      # ==================================================
 
       - name: Check World.map
         run: |
@@ -294,9 +368,9 @@ jobs:
 
           du -h map-output/World.map
 
-      # ==========================================
+      # ==================================================
       # UPLOAD
-      # ==========================================
+      # ==================================================
 
       - name: Upload World.map
         uses: actions/upload-artifact@v4
