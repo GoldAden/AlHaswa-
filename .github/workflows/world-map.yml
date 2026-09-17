@@ -24,7 +24,12 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip osmium-tool gdal-bin python3-pip
+          sudo apt-get install -y \
+            wget \
+            unzip \
+            osmium-tool \
+            gdal-bin \
+            python3-pip
 
       - name: Install ogr2osm
         run: |
@@ -35,6 +40,10 @@ jobs:
           mkdir -p world-data
           mkdir -p map-output
           mkdir -p tools
+
+      # ==========================================
+      # LAND
+      # ==========================================
 
       - name: Download world land polygons
         run: |
@@ -58,14 +67,18 @@ jobs:
 
           echo "LAND_SHP=$LAND_SHP" >> "$GITHUB_ENV"
 
-          echo "Found:"
+          echo "Land shapefile:"
           echo "$LAND_SHP"
 
-      - name: Convert land polygons to OSM
+      - name: Convert land to OSM
         run: |
           ogr2osm \
             "$LAND_SHP" \
             -o world-land.osm
+
+      # ==========================================
+      # NATURAL EARTH COUNTRIES
+      # ==========================================
 
       - name: Download Natural Earth countries
         run: |
@@ -77,7 +90,7 @@ jobs:
           unzip -o world-data/countries.zip \
             -d world-data/countries
 
-      - name: Create Natural Earth translation
+      - name: Create country translation
         run: |
           cat > tools/ne_countries.py <<'PY'
           def filterFeature(attrs):
@@ -114,7 +127,7 @@ jobs:
 
           echo "COUNTRY_SHP=$COUNTRY_SHP" >> "$GITHUB_ENV"
 
-          echo "Found:"
+          echo "Country shapefile:"
           echo "$COUNTRY_SHP"
 
       - name: Convert countries to OSM
@@ -124,82 +137,115 @@ jobs:
             -o world-countries.osm \
             -t tools/ne_countries.py
 
-      - name: Add land tags
+      # ==========================================
+      # CREATE ONE OSM FILE
+      # ==========================================
+
+      - name: Combine land and countries
         run: |
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
 
-          input_file = "world-land.osm"
-          output_file = "world-land-tagged.osm"
+          land_tree = ET.parse("world-land.osm")
+          land_root = land_tree.getroot()
 
-          tree = ET.parse(input_file)
-          root = tree.getroot()
+          country_tree = ET.parse("world-countries.osm")
+          country_root = country_tree.getroot()
 
-          for way in root.findall("way"):
-              has_natural = False
+          output_root = ET.Element(
+              "osm",
+              {
+                  "version": "0.6",
+                  "generator": "AlHaswa World Map Builder"
+              }
+          )
 
-              for tag in way.findall("tag"):
-                  if tag.attrib.get("k") == "natural":
-                      has_natural = True
-                      break
+          used_ids = set()
 
-              if not has_natural:
-                  ET.SubElement(
-                      way,
-                      "tag",
-                      {
-                          "k": "natural",
-                          "v": "land"
-                      }
-                  )
+          # Copy land nodes
+          for node in land_root.findall("node"):
+              node_id = int(node.attrib["id"])
+
+              if node_id not in used_ids:
+                  used_ids.add(node_id)
+                  output_root.append(node)
+
+          # Copy land ways
+          for way in land_root.findall("way"):
+              way_id = int(way.attrib["id"])
+
+              if way_id not in used_ids:
+                  used_ids.add(way_id)
+                  output_root.append(way)
+
+          # Copy country nodes with new negative IDs
+          next_id = -1
+
+          country_id_map = {}
+
+          for node in country_root.findall("node"):
+              old_id = node.attrib["id"]
+
+              new_id = str(next_id)
+              next_id -= 1
+
+              country_id_map[old_id] = new_id
+
+              node.attrib["id"] = new_id
+              output_root.append(node)
+
+          # Copy country ways and rewrite node references
+          for way in country_root.findall("way"):
+              new_way_id = str(next_id)
+              next_id -= 1
+
+              way.attrib["id"] = new_way_id
+
+              for nd in way.findall("nd"):
+                  old_ref = nd.attrib["ref"]
+
+                  if old_ref in country_id_map:
+                      nd.attrib["ref"] = country_id_map[old_ref]
+
+              output_root.append(way)
+
+          tree = ET.ElementTree(output_root)
 
           tree.write(
-              output_file,
+              "world.osm",
               encoding="UTF-8",
               xml_declaration=True
           )
 
-          print("Land tags added.")
+          print("Combined world.osm created.")
+          print("Elements:", len(output_root))
           PY
 
-      - name: Convert land to PBF
+      # ==========================================
+      # CONVERT ONE OSM FILE TO PBF
+      # ==========================================
+
+      - name: Convert world OSM to PBF
         run: |
           osmium cat \
-            world-land-tagged.osm \
-            -o world-land.pbf \
-            -f pbf
-
-      - name: Convert countries to PBF
-        run: |
-          osmium cat \
-            world-countries.osm \
-            -o world-countries.pbf \
-            -f pbf
-
-      # ترتيب الملفات قبل الدمج
-      - name: Sort land PBF
-        run: |
-          osmium sort \
-            world-land.pbf \
-            -o world-land-sorted.pbf \
-            -f pbf
-
-      - name: Sort countries PBF
-        run: |
-          osmium sort \
-            world-countries.pbf \
-            -o world-countries-sorted.pbf \
-            -f pbf
-
-      # دمج الملفات المرتبة
-      - name: Merge world data
-        run: |
-          osmium merge \
-            world-land-sorted.pbf \
-            world-countries-sorted.pbf \
+            world.osm \
             -o world.pbf \
-            -f pbf \
-            --overwrite
+            -f pbf
+
+      # ==========================================
+      # CHECK WORLD PBF
+      # ==========================================
+
+      - name: Check world PBF
+        run: |
+          ls -lh world.osm
+          ls -lh world.pbf
+
+          osmium fileinfo world.pbf
+
+      # ==========================================
+      # MAPSFORGE
+      # ==========================================
 
       - name: Download Mapsforge Map Writer 0.25.0
         run: |
@@ -215,6 +261,10 @@ jobs:
           jar tf mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
             | head -n 20
 
+      # ==========================================
+      # GENERATE WORLDMAP
+      # ==========================================
+
       - name: Generate World.map
         run: |
           java -Xmx6g \
@@ -225,9 +275,14 @@ jobs:
             --map-start-zoom=2 \
             --preferred-language=en
 
+      # ==========================================
+      # CHECK RESULT
+      # ==========================================
+
       - name: Check World.map
         run: |
           echo "=== MAP OUTPUT ==="
+
           ls -lh map-output/
 
           if [ ! -f map-output/World.map ]; then
@@ -238,6 +293,10 @@ jobs:
           echo "World.map created successfully."
 
           du -h map-output/World.map
+
+      # ==========================================
+      # UPLOAD
+      # ==========================================
 
       - name: Upload World.map
         uses: actions/upload-artifact@v4
