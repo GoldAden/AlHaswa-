@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<rendertheme
+<<rendertheme
     xmlns="http://mapsforge.org/renderTheme"
     version="6"
-    map-background="#9FD4E5">
+    map-background="#E8E3D8">
 
     <!-- ========================= -->
     <!-- اليابسة -->
