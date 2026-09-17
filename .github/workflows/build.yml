@@ -11,8 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -25,22 +28,76 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Check Yemen.map
+        run: |
+          echo "=== CHECK Yemen.map ==="
+
+          if [ ! -f app/src/main/assets/Yemen.map ]; then
+            echo "ERROR: Yemen.map NOT FOUND"
+            exit 1
+          fi
+
+          echo "Yemen.map exists."
+          ls -lh app/src/main/assets/Yemen.map
+
+          echo "Exact file size:"
+          stat -c%s app/src/main/assets/Yemen.map
+
       - name: Check project structure
         run: |
           echo "=== ROOT ==="
           ls -la
+
           echo "=== APP ==="
           ls -la app
+
+          echo "=== ASSETS ==="
+          ls -lh app/src/main/assets/
+
           echo "=== APP BUILD ==="
           cat app/build.gradle
+
           echo "=== SETTINGS ==="
           cat settings.gradle
 
       - name: Build APK
-        run: gradle :app:assembleDebug
+        run: |
+          gradle :app:assembleDebug
+
+      - name: Check APK size
+        run: |
+          echo "=== APK INFORMATION ==="
+
+          ls -lh app/build/outputs/apk/debug/
+
+          echo "APK exact size:"
+          stat -c%s app/build/outputs/apk/debug/app-debug.apk
+
+          echo "APK size in MB:"
+          du -h app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Check Yemen.map inside APK
+        run: |
+          echo "=== SEARCHING FOR Yemen.map INSIDE APK ==="
+
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "Yemen.map" || true
+
+          echo "=== ASSET SIZE INSIDE APK ==="
+
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "assets/Yemen.map" || true
+
+      - name: Verify APK contains Yemen.map
+        run: |
+          if unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -q "assets/Yemen.map"; then
+            echo "SUCCESS: Yemen.map is inside the APK."
+          else
+            echo "ERROR: Yemen.map is NOT inside the APK."
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: AlHaswa-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          compression-level: 0
