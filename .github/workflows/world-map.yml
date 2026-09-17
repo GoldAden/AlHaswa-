@@ -1,4 +1,4 @@
-name: Build World Mapsforge Map
+name: Build World.map Lightweight
 
 on:
   workflow_dispatch:
@@ -11,278 +11,467 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+
+      # 1. تحميل المستودع
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. Java 17
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install required tools
+      # 3. تثبيت الأدوات
+      - name: Install system tools
         run: |
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y \
             wget \
             unzip \
-            osmium-tool \
-            osmosis \
-            python3 \
-            python3-pip
+            gdal-bin \
+            python3-gdal \
+            python3-pip \
+            osmium-tool
 
-      - name: Download Mapsforge Map Writer 0.25.0
+      # 4. تثبيت Python tools
+      - name: Install Python tools
         run: |
-          wget -O mapsforge-map-writer.jar \
-            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+          python3 -m pip install --break-system-packages \
+            pyshp \
+            pyproj
 
-      - name: Show Osmosis installation
+      # 5. تحميل Osmosis 0.48.3
+      - name: Install Osmosis 0.48.3
         run: |
-          which osmosis
+          wget -q \
+            https://github.com/openstreetmap/osmosis/releases/download/0.48.3/osmosis-0.48.3.tgz
+
+          tar xzf osmosis-0.48.3.tgz
+
+          chmod +x osmosis-0.48.3/bin/osmosis
+
+          echo "$PWD/osmosis-0.48.3/bin" >> "$GITHUB_PATH"
+
           osmosis --version
-          dpkg -L osmosis | grep -E 'lib/default|osmosis$' || true
 
-      - name: Install Mapsforge plugin into Osmosis
+      # 6. تحميل Mapsforge Map Writer 0.25.0
+      - name: Download Mapsforge Writer 0.25.0
         run: |
-          OSMOSIS_HOME="$(dirname "$(dirname "$(readlink -f "$(which osmosis)")")")"
+          wget -q \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            -O mapsforge-map-writer-0.25.0.jar
 
-          echo "OSMOSIS_HOME=$OSMOSIS_HOME"
+          ls -lh mapsforge-map-writer-0.25.0.jar
 
-          find /usr/share /usr/lib -type d -path "*/osmosis*/lib/default" 2>/dev/null || true
+      # 7. تثبيت Mapsforge كـ Osmosis Plugin
+      - name: Install Mapsforge Osmosis Plugin
+        run: |
+          mkdir -p ~/.openstreetmap/osmosis/plugins
 
-          PLUGIN_DIR=$(find /usr/share /usr/lib -type d -path "*/osmosis*/lib/default" 2>/dev/null | head -n 1)
+          cp \
+            mapsforge-map-writer-0.25.0.jar \
+            ~/.openstreetmap/osmosis/plugins/
 
-          if [ -z "$PLUGIN_DIR" ]; then
-            echo "Could not find Osmosis lib/default directory"
+          echo "Installed plugins:"
+          ls -lh ~/.openstreetmap/osmosis/plugins/
+
+      # 8. فحص محتويات Mapsforge
+      - name: Verify Mapsforge Plugin
+        run: |
+          echo "Checking Mapsforge plugin classes..."
+
+          jar tf mapsforge-map-writer-0.25.0.jar \
+            | grep "MapFileWriterPluginLoader"
+
+          jar tf mapsforge-map-writer-0.25.0.jar \
+            | grep "MapFileWriterFactory"
+
+          jar tf mapsforge-map-writer-0.25.0.jar \
+            | grep "osmosis-plugins.conf"
+
+      # 9. التأكد أن Osmosis يرى mapfile-writer
+      - name: Test Mapsforge Osmosis Plugin
+        run: |
+          echo "Testing Osmosis Mapsforge plugin..."
+
+          osmosis --help > osmosis-help.txt 2>&1 || true
+
+          cat osmosis-help.txt
+
+          if grep -qi "mapfile" osmosis-help.txt; then
+            echo "Mapsforge mapfile-writer plugin detected."
+          else
+            echo "ERROR: Mapsforge mapfile-writer plugin was NOT detected."
             exit 1
           fi
 
-          echo "Using plugin directory: $PLUGIN_DIR"
-
-          cp mapsforge-map-writer.jar "$PLUGIN_DIR/"
-
-          echo "Mapsforge plugin installed:"
-          ls -lh "$PLUGIN_DIR/mapsforge-map-writer.jar"
-
-      - name: Download Natural Earth countries
+      # 10. تحميل بيانات العالم
+      - name: Download World Data
         run: |
-          wget -O ne_countries.zip \
-            https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
+          mkdir -p work
 
-          unzip -o ne_countries.zip -d natural-earth
+          cd work
 
-      - name: Download Natural Earth land
+          echo "Downloading land polygons..."
+
+          wget -q \
+            https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
+
+          unzip -q simplified-land-polygons-complete-3857.zip
+
+          echo "Downloading country boundaries..."
+
+          wget -q \
+            https://www.naturalearthdata.com/http//www.naturalearthdata.com/download/110m/cultural/ne_110m_admin_0_countries.zip
+
+          unzip -q ne_110m_admin_0_countries.zip
+
+          echo "World data downloaded."
+
+          ls -lh
+
+      # 11. إنشاء OSM واحد بدون merge
+      - name: Build Single World OSM
         run: |
-          wget -O ne_land.zip \
-            https://naciscdn.org/naturalearth/110m/physical/ne_110m_land.zip
+          cd work
 
-          unzip -o ne_land.zip -d natural-earth-land
-
-      - name: Install Python GIS tools
-        run: |
-          python3 -m pip install --break-system-packages \
-            geopandas \
-            shapely \
-            pyproj
-
-      - name: Create lightweight World OSM data
-        run: |
           cat > create_world.py <<'PY'
-          import geopandas as gpd
-          import xml.etree.ElementTree as ET
-          import itertools
+          import shapefile
+          import html
+          from pyproj import Transformer
 
-          countries = gpd.read_file(
-              "natural-earth/ne_110m_admin_0_countries.shp"
+          NODE_ID = 1
+          WAY_ID = 1
+
+          nodes = []
+          ways = []
+
+          # تحويل Web Mercator إلى WGS84
+          transformer = Transformer.from_crs(
+              "EPSG:3857",
+              "EPSG:4326",
+              always_xy=True
           )
 
-          land = gpd.read_file(
-              "natural-earth-land/ne_110m_land.shp"
-          )
+          def add_node(lon, lat):
+              global NODE_ID
 
-          root = ET.Element(
-              "osm",
-              version="0.6",
-              generator="AlHaswa World Map Builder"
-          )
+              nid = NODE_ID
+              NODE_ID += 1
 
-          node_id = itertools.count(1)
-          way_id = itertools.count(1)
+              nodes.append(
+                  f'<node id="{nid}" lat="{lat}" lon="{lon}" />'
+              )
 
-          def add_polygon(coords, tags):
-              coords = list(coords)
+              return nid
 
-              if len(coords) < 4:
+          def add_way(points, tags):
+              global WAY_ID
+
+              if len(points) < 3:
                   return
-
-              first = coords[0]
-              last = coords[-1]
-
-              if first != last:
-                  coords.append(first)
 
               refs = []
 
-              for lon, lat in coords:
-                  nid = next(node_id)
+              for lon, lat in points:
+                  refs.append(add_node(lon, lat))
 
-                  ET.SubElement(
-                      root,
-                      "node",
-                      id=str(nid),
-                      lon=str(lon),
-                      lat=str(lat)
-                  )
+              if refs[0] != refs[-1]:
+                  refs.append(refs[0])
 
-                  refs.append(nid)
+              wid = WAY_ID
+              WAY_ID += 1
 
-              wid = next(way_id)
-
-              way = ET.SubElement(
-                  root,
-                  "way",
-                  id=str(wid)
-              )
+              lines = [f'<way id="{wid}">']
 
               for ref in refs:
-                  ET.SubElement(
-                      way,
-                      "nd",
-                      ref=str(ref)
-                  )
+                  lines.append(f'<nd ref="{ref}" />')
 
               for key, value in tags.items():
-                  ET.SubElement(
-                      way,
-                      "tag",
-                      k=key,
-                      v=str(value)
+                  value = html.escape(
+                      str(value),
+                      quote=True
                   )
 
-          # Land
-          for geom in land.geometry:
-              if geom is None:
-                  continue
+                  lines.append(
+                      f'<tag k="{key}" v="{value}" />'
+                  )
 
-              if geom.geom_type == "Polygon":
-                  add_polygon(
-                      geom.exterior.coords,
+              lines.append('</way>')
+
+              ways.append('\n'.join(lines))
+
+          # =================================================
+          # LAND
+          # =================================================
+
+          land_file = "simplified-land-polygons-complete-3857.shp"
+
+          print("Reading land polygons...")
+
+          land_reader = shapefile.Reader(
+              land_file
+          )
+
+          for shape in land_reader.shapes():
+
+              points = shape.points
+              parts = list(shape.parts) + [len(points)]
+
+              for i in range(len(parts) - 1):
+
+                  polygon = points[
+                      parts[i]:parts[i + 1]
+                  ]
+
+                  converted = []
+
+                  for x, y in polygon:
+
+                      lon, lat = transformer.transform(
+                          x,
+                          y
+                      )
+
+                      converted.append(
+                          (lon, lat)
+                      )
+
+                  add_way(
+                      converted,
                       {
                           "natural": "land"
                       }
                   )
 
-              elif geom.geom_type == "MultiPolygon":
-                  for polygon in geom.geoms:
-                      add_polygon(
-                          polygon.exterior.coords,
-                          {
-                              "natural": "land"
-                          }
-                      )
+          print("Land polygons added.")
 
-          # Countries and borders
-          for _, row in countries.iterrows():
-              geom = row.geometry
+          # =================================================
+          # COUNTRIES
+          # =================================================
 
-              name = row.get("NAME")
-              iso = row.get("ISO_A3")
-
-              if not name:
-                  continue
-
-              tags = {
-                  "boundary": "administrative",
-                  "admin_level": "2",
-                  "name": str(name)
-              }
-
-              if iso:
-                  tags["ISO3166-1"] = str(iso)
-
-              if geom is None:
-                  continue
-
-              if geom.geom_type == "Polygon":
-                  add_polygon(
-                      geom.exterior.coords,
-                      tags
-                  )
-
-              elif geom.geom_type == "MultiPolygon":
-                  for polygon in geom.geoms:
-                      add_polygon(
-                          polygon.exterior.coords,
-                          tags
-                      )
-
-          tree = ET.ElementTree(root)
-          tree.write(
-              "world.osm",
-              encoding="utf-8",
-              xml_declaration=True
+          countries_file = (
+              "ne_110m_admin_0_countries.shp"
           )
 
-          print("World OSM file created.")
+          print("Reading countries...")
+
+          countries_reader = shapefile.Reader(
+              countries_file,
+              encoding="latin1"
+          )
+
+          field_names = [
+              field[0]
+              for field in countries_reader.fields[1:]
+          ]
+
+          for record in countries_reader.iterShapeRecords():
+
+              attrs = dict(
+                  zip(
+                      field_names,
+                      record.record
+                  )
+              )
+
+              name = (
+                  attrs.get("ADMIN")
+                  or attrs.get("NAME")
+                  or ""
+              )
+
+              iso = (
+                  attrs.get("ISO_A2")
+                  or ""
+              )
+
+              shape = record.shape
+
+              points = shape.points
+              parts = list(shape.parts) + [len(points)]
+
+              for i in range(len(parts) - 1):
+
+                  polygon = points[
+                      parts[i]:parts[i + 1]
+                  ]
+
+                  # Natural Earth 110m = WGS84
+                  converted = []
+
+                  for lon, lat in polygon:
+
+                      converted.append(
+                          (float(lon), float(lat))
+                      )
+
+                  add_way(
+                      converted,
+                      {
+                          "boundary": "administrative",
+                          "admin_level": "2",
+                          "name": name,
+                          "place": "country",
+                          "ISO3166-1": iso
+                      }
+                  )
+
+          print("Country polygons added.")
+
+          # =================================================
+          # WRITE OSM
+          # =================================================
+
+          print("Writing world.osm...")
+
+          with open(
+              "world.osm",
+              "w",
+              encoding="utf-8"
+          ) as f:
+
+              f.write(
+                  '<?xml version="1.0" encoding="UTF-8"?>\n'
+              )
+
+              f.write(
+                  '<osm version="0.6" '
+                  'generator="AlHaswa World Builder">\n'
+              )
+
+              for node in nodes:
+                  f.write(node + "\n")
+
+              for way in ways:
+                  f.write(way + "\n")
+
+              f.write("</osm>\n")
+
+          print("================================")
+          print("World OSM created successfully")
+          print("Nodes:", len(nodes))
+          print("Ways:", len(ways))
+          print("================================")
           PY
 
           python3 create_world.py
 
           ls -lh world.osm
 
+      # 12. تحويل OSM إلى PBF
       - name: Convert World OSM to PBF
         run: |
-          osmium cat world.osm \
-            -o world-unsorted.pbf \
-            --overwrite
+          cd work
 
-          osmium sort world-unsorted.pbf \
+          osmium cat \
+            world.osm \
             -o world.pbf \
-            --overwrite
+            --output-format=pbf
 
-          echo "World PBF created:"
           ls -lh world.pbf
 
-      - name: Verify Mapsforge Osmosis plugin
+      # 13. فحص PBF
+      - name: Check World PBF
         run: |
-          echo "Checking Mapsforge plugin..."
+          cd work
 
-          jar tf mapsforge-map-writer.jar | grep \
-            "org/mapsforge/map/writer/osmosis/MapFileWriter"
+          osmium fileinfo world.pbf
 
-          echo "Plugin configuration:"
-          unzip -p mapsforge-map-writer.jar osmosis-plugins.conf
+      # 14. إنشاء إعدادات Tags لـ Mapsforge
+      - name: Create Mapsforge Tag Mapping
+        run: |
+          cd work
 
+          cat > tag-mapping.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <tag-mapping>
+
+            <osm-tag
+              key="natural"
+              value="land"
+              zoom-appear="0" />
+
+            <osm-tag
+              key="boundary"
+              value="administrative"
+              zoom-appear="2" />
+
+            <osm-tag
+              key="admin_level"
+              value="2"
+              zoom-appear="2" />
+
+            <osm-tag
+              key="place"
+              value="country"
+              zoom-appear="2" />
+
+            <osm-tag
+              key="name"
+              value="*"
+              zoom-appear="2" />
+
+            <osm-tag
+              key="ISO3166-1"
+              value="*"
+              zoom-appear="2" />
+
+          </tag-mapping>
+          XML
+
+          cat tag-mapping.xml
+
+      # 15. إنشاء World.map عبر Osmosis + Mapsforge
       - name: Build World.map with Mapsforge
         run: |
+          cd work
+
           mkdir -p map-output
 
-          osmosis \
-            --read-pbf file=world.pbf \
-            --mapfile-writer \
-              file=map-output/World.map \
-              map-start-position=0,0 \
-              map-start-zoom=2 \
-              preferred-languages=en \
-              threads=2 \
-              bbox-enlargement=0 \
-              polygon-clipping=true \
-              way-clipping=true
+          echo "Starting Mapsforge map writer..."
 
-      - name: Check generated World.map
-        run: |
+          osmosis \
+            --rb file=world.pbf \
+            --mw file=map-output/World.map \
+            tag-conf-file=tag-mapping.xml \
+            map-start-position=15,45 \
+            map-start-zoom=2 \
+            preferred-languages=en,ar \
+            bbox=-180,-85,180,85 \
+            threads=2
+
+          echo "Mapsforge finished."
+
           ls -lh map-output/
 
-          if [ ! -f map-output/World.map ]; then
-            echo "World.map was not created"
-            exit 1
-          fi
+          test -f map-output/World.map
+
+          test -s map-output/World.map
 
           echo "World.map created successfully."
 
-      - name: Upload World.map artifact
+          du -h map-output/World.map
+
+      # 16. رفع World.map كـ Artifact
+      - name: Upload World.map
         uses: actions/upload-artifact@v4
         with:
           name: World-map
-          path: map-output/World.map
-          if-no-files-found: error
+          path: work/map-output/World.map
+          retention-days: 30
+
+      # 17. نسخ الخريطة إلى Assets
+      - name: Copy World.map to Android Assets
+        run: |
+          mkdir -p app/src/main/assets
+
+          cp \
+            work/map-output/World.map \
+            app/src/main/assets/World.map
+
+          echo "World.map copied to Android assets."
+
+          ls -lh app/src/main/assets/World.map
