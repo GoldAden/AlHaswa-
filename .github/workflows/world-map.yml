@@ -58,7 +58,7 @@ jobs:
 
           echo "LAND_SHP=$LAND_SHP" >> "$GITHUB_ENV"
 
-          echo "Found land shapefile:"
+          echo "Found:"
           echo "$LAND_SHP"
 
       - name: Convert land polygons to OSM
@@ -114,7 +114,7 @@ jobs:
 
           echo "COUNTRY_SHP=$COUNTRY_SHP" >> "$GITHUB_ENV"
 
-          echo "Found country shapefile:"
+          echo "Found:"
           echo "$COUNTRY_SHP"
 
       - name: Convert countries to OSM
@@ -136,11 +136,9 @@ jobs:
           root = tree.getroot()
 
           for way in root.findall("way"):
-              tags = way.findall("tag")
-
               has_natural = False
 
-              for tag in tags:
+              for tag in way.findall("tag"):
                   if tag.attrib.get("k") == "natural":
                       has_natural = True
                       break
@@ -161,7 +159,7 @@ jobs:
               xml_declaration=True
           )
 
-          print("Land tags added successfully.")
+          print("Land tags added.")
           PY
 
       - name: Convert land to PBF
@@ -178,11 +176,27 @@ jobs:
             -o world-countries.pbf \
             -f pbf
 
+      # ترتيب الملفات قبل الدمج
+      - name: Sort land PBF
+        run: |
+          osmium sort \
+            world-land.pbf \
+            -o world-land-sorted.pbf \
+            -f pbf
+
+      - name: Sort countries PBF
+        run: |
+          osmium sort \
+            world-countries.pbf \
+            -o world-countries-sorted.pbf \
+            -f pbf
+
+      # دمج الملفات المرتبة
       - name: Merge world data
         run: |
           osmium merge \
-            world-land.pbf \
-            world-countries.pbf \
+            world-land-sorted.pbf \
+            world-countries-sorted.pbf \
             -o world.pbf \
             -f pbf \
             --overwrite
