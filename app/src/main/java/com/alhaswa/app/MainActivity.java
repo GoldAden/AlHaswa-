@@ -389,14 +389,16 @@ public class MainActivity extends Activity {
     }
 
     /*
-     * نسخ Yemen.map من assets إلى التخزين الداخلي
+     * نسخ خريطة جديدة باسم مختلف.
+     * هذا يمنع استخدام النسخة القديمة الموجودة
+     * في ذاكرة التطبيق.
      */
     private File getMapFile() throws Exception {
 
         File mapFile =
                 new File(
                         getFilesDir(),
-                        "Yemen.map"
+                        "Yemen_v2.map"
                 );
 
         if (!mapFile.exists()) {
@@ -410,7 +412,7 @@ public class MainActivity extends Activity {
                     new FileOutputStream(mapFile);
 
             byte[] buffer =
-                    new byte[8192];
+                    new byte[1024 * 1024];
 
             int length;
 
@@ -492,9 +494,6 @@ public class MainActivity extends Activity {
 
         try {
 
-            /*
-             * تحميل خريطة اليمن فقط
-             */
             File mapFile =
                     getMapFile();
 
@@ -510,7 +509,7 @@ public class MainActivity extends Activity {
             TileCache tileCache =
                     AndroidUtil.createTileCache(
                             this,
-                            "yemen-map-cache",
+                            "yemen-map-cache-v2",
                             tileSize,
                             2f,
                             2f
@@ -549,7 +548,7 @@ public class MainActivity extends Activity {
                     );
 
             /*
-             * مركز الخريطة على اليمن
+             * مركز اليمن
              */
             mapView.setCenter(
                     new LatLong(
@@ -558,8 +557,11 @@ public class MainActivity extends Activity {
                     )
             );
 
+            /*
+             * مستوى مناسب لإظهار تفاصيل اليمن
+             */
             mapView.setZoomLevel(
-                    (byte) 6
+                    (byte) 8
             );
 
             mapView.invalidate();
@@ -575,6 +577,8 @@ public class MainActivity extends Activity {
             Toast.makeText(
                     this,
                     "خطأ في تحميل الخريطة: "
+                            + e.getClass().getSimpleName()
+                            + " - "
                             + e.getMessage(),
                     Toast.LENGTH_LONG
             ).show();
