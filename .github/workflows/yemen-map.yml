@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: '0 2 * * 0'
 
+permissions:
+  contents: write
+
 jobs:
   build-yemen-map:
     runs-on: ubuntu-latest
@@ -53,19 +56,40 @@ jobs:
             --rb file=yemen-latest.osm.pbf \
             --mw file=Yemen.map type=ram
 
+      - name: Put map in Android assets
+        run: |
+          mkdir -p app/src/main/assets
+          cp Yemen.map app/src/main/assets/Yemen.map
+          ls -lh app/src/main/assets/Yemen.map
+
+      - name: Install Git LFS
+        run: |
+          git lfs install
+
+      - name: Track Yemen.map with Git LFS
+        run: |
+          git lfs track "app/src/main/assets/Yemen.map"
+          git add .gitattributes
+          git add app/src/main/assets/Yemen.map
+
+      - name: Commit Yemen.map
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Add Yemen offline vector map"
+            git push
+          fi
+
       - name: Verify Yemen.map
         run: |
-          if [ ! -s Yemen.map ]; then
+          if [ ! -s app/src/main/assets/Yemen.map ]; then
             echo "ERROR: Yemen.map was not created."
             exit 1
           fi
 
-          echo "Yemen.map created successfully:"
-          ls -lh Yemen.map
-
-      - name: Upload Yemen Vector Map
-        uses: actions/upload-artifact@v4
-        with:
-          name: Yemen-Vector-Map
-          path: Yemen.map
-          retention-days: 30
+          echo "Yemen.map is ready:"
+          ls -lh app/src/main/assets/Yemen.map
