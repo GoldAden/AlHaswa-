@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rendertheme
+    xmlns="http://mapsforge.org/renderTheme"
+    version="6">
+
+    <!-- حدود الدول البرية فقط -->
+    <rule e="way" k="boundary" v="administrative">
+
+        <line
+            stroke="#555555"
+            stroke-width="1"
+            stroke-dasharray="6,3"
+            zoom-min="3"/>
+
+        <pathText
+            k="name"
+            font-size="9"
+            fill="#333333"
+            stroke="#FFFFFF"
+            stroke-width="2"
+            priority="20"
+            zoom-min="4"/>
+
+    </rule>
+
+    <!-- الحدود الوطنية إن كانت موجودة في world.map -->
+    <rule e="way" k="boundary" v="national">
+
+        <line
+            stroke="#555555"
+            stroke-width="1"
+            stroke-dasharray="6,3"
+            zoom-min="3"/>
+
+        <pathText
+            k="name"
+            font-size="9"
+            fill="#333333"
+            stroke="#FFFFFF"
+            stroke-width="2"
+            priority="20"
+            zoom-min="4"/>
+
+    </rule>
+
+    <!-- أسماء الدول -->
+    <rule e="node" k="place" v="country">
+
+        <caption
+            k="name"
+            font-size="13"
+            font-style="bold"
+            fill="#222222"
+            stroke="#FFFFFF"
+            stroke-width="3"
+            priority="30"
+            zoom-min="3"/>
+
+    </rule>
+
+</rendertheme>
