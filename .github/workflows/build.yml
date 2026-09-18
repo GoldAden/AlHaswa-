@@ -13,7 +13,7 @@ jobs:
     steps:
 
       # =========================
-      # تحميل المشروع
+      # Checkout
       # =========================
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,9 +39,9 @@ jobs:
 
 
       # =========================
-      # إنشاء مجلد الخرائط
+      # إنشاء المجلدات
       # =========================
-      - name: Create map directories
+      - name: Create directories
         run: |
           mkdir -p map-output
           mkdir -p app/src/main/assets
@@ -61,7 +61,7 @@ jobs:
 
 
       # =========================
-      # تحميل Map Writer 0.25.0
+      # تحميل Mapsforge Map Writer
       # =========================
       - name: Download Mapsforge Map Writer
         run: |
@@ -70,11 +70,23 @@ jobs:
 
 
       # =========================
+      # التحقق من الـJAR
+      # =========================
+      - name: Check Map Writer
+        run: |
+          ls -lh mapsforge-map-writer-0.25.0.jar
+
+          jar tf mapsforge-map-writer-0.25.0.jar | grep "OSMMapWriter.class" || true
+
+
+      # =========================
       # إنشاء Yemen.map
       # =========================
       - name: Build Yemen.map
         run: |
-          java -Xmx6g -jar mapsforge-map-writer-0.25.0.jar \
+          java -Xmx6g \
+            -cp mapsforge-map-writer-0.25.0.jar \
+            org.mapsforge.map.writer.OSMMapWriter \
             --map-file=yemen-latest.osm.pbf \
             --output-dir=map-output \
             --map-start-position=15.5527,48.5164 \
@@ -87,13 +99,16 @@ jobs:
       # =========================
       - name: Check Yemen.map
         run: |
+          echo "=== YEMEN MAP ==="
+
+          ls -lh map-output/
+
           if [ ! -f map-output/Yemen.map ]; then
             echo "ERROR: Yemen.map was not created."
             exit 1
           fi
 
-          echo "Yemen.map:"
-          ls -lh map-output/Yemen.map
+          echo "Yemen.map created successfully."
 
 
       # ==================================================
@@ -119,7 +134,7 @@ jobs:
             exit 1
           fi
 
-          echo "world.map:"
+          echo "World.map created/downloaded successfully."
           ls -lh map-output/world.map
 
 
@@ -141,15 +156,15 @@ jobs:
       # =========================
       - name: Verify Android assets
         run: |
-          echo "=== MAP FILES ==="
+          echo "================================"
+          echo "MAP FILES IN ANDROID ASSETS"
+          echo "================================"
 
           ls -lh app/src/main/assets/Yemen.map
           ls -lh app/src/main/assets/world.map
 
           echo ""
-          echo "Maps installed successfully:"
-          echo "app/src/main/assets/Yemen.map"
-          echo "app/src/main/assets/world.map"
+          echo "Maps installed successfully."
 
 
       # =========================
@@ -166,7 +181,7 @@ jobs:
 
 
       # =========================
-      # حفظ الخرائط داخل GitHub
+      # حفظ الخرائط في المستودع
       # =========================
       - name: Commit maps to repository
         run: |
