@@ -35,10 +35,19 @@ jobs:
   
       # ==========================================  
       #  4 — تثبيت الأدوات  
+      #  
+      #  مشكلة: osmosis غير متوفر في Ubuntu 24.04  
+      #  الحل: نضيف مستودع Ubuntu 22.04 مؤقتاً  
+      #  (osmosis حزمة Java "all" فلا يوجد تعارض)  
       # ==========================================  
       - name: Install tools  
         run: |  
+          # إضافة مستودع jammy مؤقتاً لتنزيل osmosis  
+          echo "deb http://archive.ubuntu.com/ubuntu jammy universe" \  
+            | sudo tee /etc/apt/sources.list.d/jammy.list  
+  
           sudo apt-get update  
+  
           sudo apt-get install -y \  
             wget \  
             unzip \  
@@ -46,7 +55,17 @@ jobs:
             osmosis \  
             python3-pip  
   
-          pip install --upgrade pyshp  
+          # إزالة المستودع المؤقت (لا نحتاجه بعد التثبيت)  
+          sudo rm /etc/apt/sources.list.d/jammy.list  
+  
+          # pyshp - نستخدم --break-system-packages لأننا في CI  
+          pip install --break-system-packages pyshp  
+  
+          # التحقق من أن كل شيء يعمل  
+          echo "=== Verification ==="  
+          osmosis --version 2>&1 | head -3  
+          osmium --version  
+          python3 -c "import shapefile; print('pyshp OK')"    
   
       # ==========================================  
       #  5 — تنزيل Natural Earth (دقة 50م)  
