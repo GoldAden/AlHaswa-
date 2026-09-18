@@ -1,23 +1,35 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <application
-        android:theme="@style/AppTheme"
-        android:label="الحسوة ماجلان"
-        android:allowBackup="true"
-        android:supportsRtl="true">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-        </activity>
-
-    </application>
-
-</manifest>
+<?xml version="1.0" encoding="utf-8"?>  
+<manifest  
+    xmlns:android="http://schemas.android.com/apk/res/android"  
+    package="com.alhaswa.app">  
+  
+    <!-- صلاحيات GPS للملاحة -->  
+    <uses-permission  
+        android:name="android.permission.ACCESS_FINE_LOCATION" />  
+    <uses-permission  
+        android:name="android.permission.ACCESS_COARSE_LOCATION" />  
+  
+    <!-- صلاحية GPSHardware للجهاز -->  
+    <uses-feature  
+        android:name="android.hardware.location.gps"  
+        android:required="false" />  
+  
+    <application  
+        android:allowBackup="true"  
+        android:label="الحسوة ماجلان"  
+        android:theme="@style/AppTheme">  
+  
+        <activity  
+            android:name=".MainActivity"  
+            android:exported="true">  
+            <intent-filter>  
+                <action  
+                    android:name="android.intent.action.MAIN" />  
+                <category  
+                    android:name="android.intent.category.LAUNCHER" />  
+            </intent-filter>  
+        </activity>  
+  
+    </application>  
+  
+</manifest>  
