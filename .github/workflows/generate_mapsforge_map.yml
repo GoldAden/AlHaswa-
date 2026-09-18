@@ -1,564 +1,300 @@
-name: Generate AlHaswa Mapsforge Map  
-  
-on:  
-  workflow_dispatch:  
-  
-jobs:  
-  build-map:  
-    runs-on: ubuntu-latest  
-  
-    steps:  
-      # ==========================================  
-      #  1 — استنساخ المستودع (مع سحب ملفات LFS)  
-      # ==========================================  
-      - name: Checkout repository  
-        uses: actions/checkout@v4  
-        with:  
-          lfs: true  
-  
-      # ==========================================  
-      #  2 — إعداد Java 21 (مطلوب لـ Osmosis)  
-      # ==========================================  
-      - name: Setup Java 21  
-        uses: actions/setup-java@v4  
-        with:  
-          distribution: temurin  
-          java-version: '21'  
-  
-      # ==========================================  
-      #  3 — إعداد Python  
-      # ==========================================  
-      - name: Setup Python  
-        uses: actions/setup-python@v5  
-        with:  
-          python-version: '3.11'  
-          
-      # ==========================================
+name: Generate AlHaswa Mapsforge Map
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-map:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ============================================
+      #  1 — Checkout
+      # ============================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ============================================
+      #  2 — Java 21 (مطلوب لـ Osmosis + Mapsforge Writer)
+      # ============================================
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # ============================================
+      #  3 — Python 3.11 (مستقل عن نظام Ubuntu)
+      # ============================================
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ============================================
       #  4 — تثبيت الأدوات
-      # ==========================================
+      #   - osmosis من مستودع jammy لأنه حُذف من noble
+      #   - نستخدم python/pip من setup-python فقط
+      # ============================================
       - name: Install tools
         run: |
+          # إضافة مستودع jammy مؤقتاً لتنزيل osmosis
           echo "deb http://archive.ubuntu.com/ubuntu jammy universe" | sudo tee /etc/apt/sources.list.d/jammy.list
 
-          sudo apt-get update
+          sudo apt-get update -qq
 
-          sudo apt-get install -y \
-            wget \
-            unzip \
-            osmium-tool \
-            osmosis \
-            python3-pip
+          sudo apt-get install -y wget unzip osmium-tool osmosis
 
+          # حذف مستودع jammy بعد التثبيت
           sudo rm -f /etc/apt/sources.list.d/jammy.list
 
-          pip install --break-system-packages pyshp
+          # تثبيت pyshp في Python 3.11 فقط
+          pip install pyshp
 
+          # التحقق
           echo "=== Verification ==="
           osmosis --version 2>&1 | head -3
           osmium --version
-          python3 -c "import shapefile; print('pyshp OK')"
-  
-          # إزالة المستودع المؤقت (لا نحتاجه بعد التثبيت)  
-          sudo rm /etc/apt/sources.list.d/jammy.list  
-  
-          # pyshp - نستخدم --break-system-packages لأننا في CI  
-          pip install --break-system-packages pyshp  
-  
-          # التحقق من أن كل شيء يعمل  
-          echo "=== Verification ==="  
-          osmosis --version 2>&1 | head -3  
-          osmium --version  
-          python3 -c "import shapefile; print('pyshp OK')"    
-  
-      # ==========================================  
-      #  5 — تنزيل Natural Earth (دقة 50م)  
-      #  
-      #  لماذا 50م؟  
-      #  - دقة 10م = ملفات ضخمة جدًا (مئات MB)  
-      #  - دقة 50م = ملفات معقولة ومظهر ممتاز  
-      #    عند مستوى نظرة العالم (zoom 3-8)  
-      #  - اليمن التفصيلي يأتي من Geofabrik  
-      # ==========================================  
-      - name: Download Natural Earth data  
-        run: |  
-          mkdir -p data/natural-earth  
-  
-          # مضلعات اليابسة ← natural=nosea  
-          wget -O data/natural-earth/land.zip \  
-            "https://naturalearth.s3.amazonaws.com/50m_physical/ne_50m_land.zip"  
-  
-          # حدود الدول + أسماء ← boundary=administrative  
-          wget -O data/natural-earth/countries.zip \  
-            "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_countries.zip"  
-  
-          # خطوط الساحل ← natural=coastline  
-          wget -O data/natural-earth/coastline.zip \  
-            "https://naturalearth.s3.amazonaws.com/50m_physical/ne_50m_coastline.zip"  
-  
-          unzip -o data/natural-earth/land.zip \  
-            -d data/natural-earth/land  
-  
-          unzip -o data/natural-earth/countries.zip \  
-            -d data/natural-earth/countries  
-  
-          unzip -o data/natural-earth/coastline.zip \  
-            -d data/natural-earth/coastline  
-  
-          echo "=== Natural Earth files ==="  
-          ls -lh data/natural-earth/land/  
-          ls -lh data/natural-earth/countries/  
-          ls -lh data/natural-earth/coastline/  
-  
-      # ==========================================  
-      #  6 — تنزيل بيانات اليمن من Geofabrik  
-      # ==========================================  
-      - name: Download Yemen OSM data  
-        run: |  
-          mkdir -p data/yemen  
-  
-          wget -O data/yemen/yemen.osm.pbf \  
-            "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"  
-  
-          echo "=== Yemen data ==="  
-          ls -lh data/yemen/yemen.osm.pbf  
-  
-      # ==========================================  
-      #  7 — تحويل مضلعات اليابسة → natural=nosea  
-      #  
-      #  هذه الخطوة هي الإصلاح الأساسي لمشكلة  
-      #  "كل شيء أزرق". بدون nosea لن تظهر  
-      #  اليابسة بأي لون.  
-      # ==========================================  
-      - name: Convert Natural Earth land → OSM (nosea)  
-        run: |  
-          cat > convert_land.py <<'PY'  
-          import shapefile  
-          import xml.etree.ElementTree as ET  
-  
-          INPUT  = "data/natural-earth/land/ne_50m_land.shp"  
-          OUTPUT = "data/world-land.osm"  
-  
-          print("Reading:", INPUT)  
-          sf = shapefile.Reader(INPUT)  
-          print(f"Found {len(sf.shapes())} land polygons")  
-  
-          root = ET.Element("osm", {  
-              "version": "0.6",  
-              "generator": "AlHaswa-NaturalEarth-Land"  
-          })  
-  
-          next_node_id = -1  
-          next_way_id  = -1  
-  
-          def add_tag(parent, key, value):  
-              ET.SubElement(parent, "tag", {  
-                  "k": key,  
-                  "v": str(value)  
-              })  
-  
-          total_ways  = 0  
-          total_nodes = 0  
-  
-          for shape in sf.shapes():  
-              points = shape.points  
-              parts  = list(shape.parts)  
-              parts.append(len(points))  
-  
-              for p in range(len(parts) - 1):  
-                  ring = points[parts[p]:parts[p + 1]]  
-  
-                  if len(ring) < 3:  
-                      continue  
-  
-                  way = ET.SubElement(root, "way", {  
-                      "id": str(next_way_id),  
-                      "version": "1"  
-                  })  
-                  next_way_id -= 1  
-                  total_ways += 1  
-  
-                  node_ids = []  
-                  for lon, lat in ring:  
-                      node = ET.SubElement(root, "node", {  
-                          "id": str(next_node_id),  
-                          "version": "1",  
-                          "lat": str(lat),  
-                          "lon": str(lon)  
-                      })  
-                      node_ids.append(next_node_id)  
-                      next_node_id -= 1  
-                      total_nodes += 1  
-  
-                  # إغلاق الحلقة  
-                  if node_ids[0] != node_ids[-1]:  
-                      node_ids.append(node_ids[0])  
-  
-                  for nid in node_ids:  
-                      ET.SubElement(way, "nd", {"ref": str(nid)})  
-  
-                  add_tag(way, "natural", "nosea")  
-                  add_tag(way, "area",   "yes")  
-  
-          tree = ET.ElementTree(root)  
-          tree.write(OUTPUT, encoding="utf-8", xml_declaration=True)  
-  
-          print(f"Created: {OUTPUT}")  
-          print(f"  Ways:  {total_ways}")  
-          print(f"  Nodes: {total_nodes}")  
-          PY  
-  
-          python3 convert_land.py  
-          ls -lh data/world-land.osm  
-  
-      # ==========================================  
-      #  8 — تحويل حدود الدول → boundary + name  
-      # ==========================================  
-      - name: Convert Natural Earth countries → OSM  
-        run: |  
-          cat > convert_countries.py <<'PY'  
-          import shapefile  
-          import xml.etree.ElementTree as ET  
-  
-          INPUT  = "data/natural-earth/countries/ne_50m_admin_0_countries.shp"  
-          OUTPUT = "data/world-countries.osm"  
-  
-          print("Reading:", INPUT)  
-          sf = shapefile.Reader(INPUT, encoding="utf-8")  
-          print(f"Found {len(sf.shapes())} country polygons")  
-  
-          root = ET.Element("osm", {  
-              "version": "0.6",  
-              "generator": "AlHaswa-NaturalEarth-Countries"  
-          })  
-  
-          next_node_id  = -100000000  
-          next_way_id   = -100000000  
-          next_place_id = -200000000  
-  
-          def add_tag(parent, key, value):  
-              if value:  
-                  ET.SubElement(parent, "tag", {  
-                      "k": key,  
-                      "v": str(value)  
-                  })  
-  
-          total_ways   = 0  
-          total_places = 0  
-  
-          for record, shape in zip(sf.records(), sf.shapes()):  
-              fields = sf.fields[1:]  
-              values = list(record)  
-              attrs  = {  
-                  fields[i][0]: values[i]  
-                  for i in range(len(fields))  
-              }  
-  
-              name = (  
-                  attrs.get("NAME")  
-                  or attrs.get("ADMIN")  
-                  or attrs.get("SOVEREIGNT")  
-                  or "Unknown"  
-              )  
-  
-              name_ar = attrs.get("NAME_AR") or ""  
-  
-              points = shape.points  
-              parts  = list(shape.parts)  
-              parts.append(len(points))  
-  
-              for p in range(len(parts) - 1):  
-                  ring = points[parts[p]:parts[p + 1]]  
-  
-                  if len(ring) < 3:  
-                      continue  
-  
-                  way = ET.SubElement(root, "way", {  
-                      "id": str(next_way_id),  
-                      "version": "1"  
-                  })  
-                  next_way_id -= 1  
-                  total_ways += 1  
-  
-                  node_ids = []  
-                  for lon, lat in ring:  
-                      node = ET.SubElement(root, "node", {  
-                          "id": str(next_node_id),  
-                          "version": "1",  
-                          "lat": str(lat),  
-                          "lon": str(lon)  
-                      })  
-                      node_ids.append(next_node_id)  
-                      next_node_id -= 1  
-  
-                  if node_ids[0] != node_ids[-1]:  
-                      node_ids.append(node_ids[0])  
-  
-                  for nid in node_ids:  
-                      ET.SubElement(way, "nd", {"ref": str(nid)})  
-  
-                  add_tag(way, "boundary",    "administrative")  
-                  add_tag(way, "admin_level", "2")  
-                  add_tag(way, "name",       name)  
-                  if name_ar:  
-                      add_tag(way, "name:ar", name_ar)  
-  
-          # عقد place=country في مركز كل دولة  
-          for record, shape in zip(sf.records(), sf.shapes()):  
-              fields = sf.fields[1:]  
-              values = list(record)  
-              attrs  = {fields[i][0]: values[i] for i in range(len(fields))}  
-  
-              name    = attrs.get("NAME") or attrs.get("ADMIN") or "Unknown"  
-              name_ar = attrs.get("NAME_AR") or ""  
-  
-              if shape.points:  
-                  lats = [p[1] for p in shape.points]  
-                  lons = [p[0] for p in shape.points]  
-                  clat = sum(lats) / len(lats)  
-                  clon = sum(lons) / len(lons)  
-  
-                  node = ET.SubElement(root, "node", {  
-                      "id": str(next_place_id),  
-                      "version": "1",  
-                      "lat": str(clat),  
-                      "lon": str(clon)  
-                  })  
-                  next_place_id -= 1  
-                  total_places += 1  
-  
-                  add_tag(node, "place",    "country")  
-                  add_tag(node, "name",     name)  
-                  if name_ar:  
-                      add_tag(node, "name:ar", name_ar)  
-                  add_tag(node, "name:en",  name)  
-  
-          tree = ET.ElementTree(root)  
-          tree.write(OUTPUT, encoding="utf-8", xml_declaration=True)  
-  
-          print(f"Created: {OUTPUT}")  
-          print(f"  Boundary ways:  {total_ways}")  
-          print(f"  Country places: {total_places}")  
-          PY  
-  
-          python3 convert_countries.py  
-          ls -lh data/world-countries.osm  
-  
-      # ==========================================  
-      #  9 — تحويل خطوط الساحل → natural=coastline  
-      # ==========================================  
-      - name: Convert Natural Earth coastline → OSM  
-        run: |  
-          cat > convert_coastline.py <<'PY'  
-          import shapefile  
-          import xml.etree.ElementTree as ET  
-  
-          INPUT  = "data/natural-earth/coastline/ne_50m_coastline.shp"  
-          OUTPUT = "data/world-coastline.osm"  
-  
-          print("Reading:", INPUT)  
-          sf = shapefile.Reader(INPUT)  
-          print(f"Found {len(sf.shapes())} coastline lines")  
-  
-          root = ET.Element("osm", {  
-              "version": "0.6",  
-              "generator": "AlHaswa-NaturalEarth-Coastline"  
-          })  
-  
-          next_node_id = -300000000  
-          next_way_id  = -300000000  
-  
-          total_ways = 0  
-  
-          for shape in sf.shapes():  
-              points = shape.points  
-  
-              if len(points) < 2:  
-                  continue  
-  
-              way = ET.SubElement(root, "way", {  
-                  "id": str(next_way_id),  
-                  "version": "1"  
-              })  
-              next_way_id -= 1  
-              total_ways += 1  
-  
-              for lon, lat in points:  
-                  node = ET.SubElement(root, "node", {  
-                      "id": str(next_node_id),  
-                      "version": "1",  
-                      "lat": str(lat),  
-                      "lon": str(lon)  
-                  })  
-                  ET.SubElement(way, "nd", {  
-                      "ref": str(next_node_id)  
-                  })  
-                  next_node_id -= 1  
-  
-              ET.SubElement(way, "tag", {  
-                  "k": "natural",  
-                  "v": "coastline"  
-              })  
-  
-          tree = ET.ElementTree(root)  
-          tree.write(OUTPUT, encoding="utf-8", xml_declaration=True)  
-  
-          print(f"Created: {OUTPUT}")  
-          print(f"  Coastline ways: {total_ways}")  
-          PY  
-  
-          python3 convert_coastline.py  
-          ls -lh data/world-coastline.osm  
-  
-      # ==========================================  
-      #  10 — تحويل OSM XML → PBF  
-      # ==========================================  
-      - name: Convert OSM XML to PBF  
-        run: |  
-          echo "Converting world-land.osm → PBF ..."  
-          osmosis \  
-            --read-xml file=data/world-land.osm \  
-            --write-pbf  file=data/world-land.pbf  
-  
-          echo "Converting world-countries.osm → PBF ..."  
-          osmosis \  
-            --read-xml file=data/world-countries.osm \  
-            --write-pbf  file=data/world-countries.pbf  
-  
-          echo "Converting world-coastline.osm → PBF ..."  
-          osmosis \  
-            --read-xml file=data/world-coastline.osm \  
-            --write-pbf  file=data/world-coastline.pbf  
-  
-          echo "=== PBF file sizes ==="  
-          ls -lh data/world-land.pbf  
-          ls -lh data/world-countries.pbf  
-          ls -lh data/world-coastline.pbf  
-  
-      # ==========================================  
-      #  11 — إزالة الحدود البحرية من اليمن  
-      #  
-      #  نستخدم --invert-match لنبقي كل شيء  
-      #  ما عدا: boundary=maritime أو maritime=yes  
-      # ==========================================  
-      - name: Remove maritime boundaries from Yemen  
-        run: |  
-          osmium tags-filter \  
-            data/yemen/yemen.osm.pbf \  
-            boundary=maritime \  
-            maritime=yes \  
-            --invert-match \  
-            -o data/yemen/yemen-clean.pbf \  
-            --overwrite  
-  
-          echo "=== Yemen clean data ==="  
-          ls -lh data/yemen/yemen-clean.pbf  
-  
-      # ==========================================  
-      #  12 — دمج جميع البيانات  
-      # ==========================================  
-      - name: Merge all data  
-        run: |  
-          osmium merge \  
-            data/world-land.pbf \  
-            data/world-countries.pbf \  
-            data/world-coastline.pbf \  
-            data/yemen/yemen-clean.pbf \  
-            -o data/AlHaswa-source.pbf \  
-            --overwrite  
-  
-          echo "=== Merged source ==="  
-          ls -lh data/AlHaswa-source.pbf  
-  
-      # ==========================================  
-      #  13 — تثبيت Mapsforge Map Writer 0.25.0  
-      #  
-      #  ملاحظة مهمة:  
-      #  المكتبة هي Osmosis Plugin وليست أداة مستقلة.  
-      #  لذلك نضعها في مجلد plugins الخاص بـ Osmosis.  
-      # ==========================================  
-      - name: Download and install Mapsforge Map Writer 0.25.0  
-        run: |  
-          wget -O mapsforge-map-writer.jar \  
-            "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"  
-  
-          mkdir -p ~/.openstreetmap/osmosis/plugins  
-          cp mapsforge-map-writer.jar \  
-            ~/.openstreetmap/osmosis/plugins/  
-  
-          echo "=== Map Writer plugin installed ==="  
-          ls -lh ~/.openstreetmap/osmosis/plugins/  
-  
-      # ==========================================  
-      #  14 — توليد AlHaswa.map  
-      #  
-      #  الصيغة الناتجة: Mapsforge v5  
-      #  (متوافقة حصريًا مع Mapsforge 0.14+ / 0.25.0)  
-      #  
-      #  البارامترات:  
-      #  - type=ram : تخزين في الذاكرة (أسرع)  
-      #  - map-start-position : مركز اليمن  
-      #  - map-start-zoom : مستوى التكبير الابتدائي  
-      #  - preferred-languages : أولوية العربية  
-      # ==========================================  
-      - name: Generate AlHaswa.map  
-        run: |  
-          mkdir -p app/src/main/assets  
-  
-          osmosis \  
-            --read-pbf file=data/AlHaswa-source.pbf \  
-            --map-writer \  
-            file=app/src/main/assets/AlHaswa.map \  
-            type=ram \  
-            map-start-position=15.3694,44.1910 \  
-            map-start-zoom=6 \  
-            preferred-languages=ar,en  
-  
-      # ==========================================  
-      #  15 — التحقق من الملف  
-      # ==========================================  
-      - name: Verify generated map  
-        run: |  
-          test -s app/src/main/assets/AlHaswa.map  
-  
-          SIZE=$(stat --format="%s" app/src/main/assets/AlHaswa.map)  
-          MB=$((SIZE / 1024 / 1024))  
-  
-          echo "AlHaswa.map: ${SIZE} bytes (${MB} MB)"  
-  
-          # رفض ملف أصغر من 10 ك.ب.  
-          if [ "$SIZE" -lt 10000 ]; then  
-            echo "ERROR: Map too small (${SIZE} bytes)"  
-            exit 1  
-          fi  
-  
-          # عرض الهيدر (يجب أن يظهر mapsforge binary OSM)  
-          echo "=== File header ==="  
-          head -c 50 app/src/main/assets/AlHaswa.map | strings  
-  
-          echo ""  
-          echo "========================================="  
-          echo "  AlHaswa.map generated successfully"  
-          echo "  Format: Mapsforge v5"  
-          echo "  Compatible with: Mapsforge 0.25.0"  
-          echo "========================================="  
-  
-      # ==========================================  
-      #  16 — إعداد Git LFS + رفع الخريطة  
-      # ==========================================  
-      - name: Setup Git LFS and commit map  
-        run: |  
-          git lfs install  
-  
-          # تتبع جميع ملفات .map في assets عبر LFS  
-          echo "app/src/main/assets/*.map filter=lfs diff=lfs merge=lfs -text" >> .gitattributes  
-  
-          git config user.name  "GitHub Actions Bot"  
-          git config user.email "actions@github.com"  
-  
-          git add .gitattributes  
-          git add app/src/main/assets/AlHaswa.map  
-  
-          git commit -m "chore: generate unified AlHaswa map (Mapsforge v5 / 0.25.0)" \  
-            || echo "No changes to commit"  
-  
-          git push  
+          python -c "import shapefile; print('pyshp OK, path:', shapefile.__file__)"
+
+      # ============================================
+      #  5 — تنزيل Natural Earth
+      # ============================================
+      - name: Download Natural Earth
+        run: |
+          mkdir -p data/natural-earth
+
+          wget -O data/natural-earth/countries.zip \
+            "https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_admin_0_countries.zip"
+
+          wget -O data/natural-earth/coastline.zip \
+            "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_coastline.zip"
+
+          unzip -o data/natural-earth/countries.zip -d data/natural-earth/countries
+          unzip -o data/natural-earth/coastline.zip -d data/natural-earth/coastline
+
+      # ============================================
+      #  6 — تنزيل اليمن من Geofabrik
+      # ============================================
+      - name: Download Yemen OSM
+        run: |
+          mkdir -p data/yemen
+
+          wget -O data/yemen/yemen.osm.pbf \
+            "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"
+
+          ls -lh data/yemen/yemen.osm.pbf
+
+      # ============================================
+      #  7 — تحويل حدود الدول إلى OSM
+      #    (boundary=administrative + admin_level=2 + name)
+      # ============================================
+      - name: Convert Natural Earth countries to OSM
+        run: |
+          cat > convert_world.py <<'PY'
+          import shapefile
+          import xml.etree.ElementTree as ET
+
+          INPUT = "data/natural-earth/countries/ne_10m_admin_0_countries.shp"
+          OUTPUT = "data/world-countries.osm"
+
+          sf = shapefile.Reader(INPUT, encoding="utf-8")
+
+          root = ET.Element("osm", {"version": "0.6", "generator": "AlHaswa-NaturalEarth"})
+
+          next_node = -1
+          next_way = -1
+
+          def tag(parent, key, value):
+              ET.SubElement(parent, "tag", {"k": key, "v": str(value)})
+
+          for record, shape in zip(sf.records(), sf.shapes()):
+              fields = sf.fields[1:]
+              values = list(record)
+              attrs = {fields[i][0]: values[i] for i in range(len(fields))}
+
+              name = attrs.get("NAME") or attrs.get("ADMIN") or attrs.get("SOVEREIGNT") or "Unknown"
+
+              points = shape.points
+              parts = list(shape.parts)
+              parts.append(len(points))
+
+              for p in range(len(parts) - 1):
+                  ring = points[parts[p]:parts[p + 1]]
+                  if len(ring) < 3:
+                      continue
+
+                  way = ET.SubElement(root, "way", {"id": str(next_way), "version": "1"})
+                  next_way -= 1
+
+                  node_ids = []
+                  for lon, lat in ring:
+                      node = ET.SubElement(root, "node", {"id": str(next_node), "version": "1", "lat": str(lat), "lon": str(lon)})
+                      node_ids.append(next_node)
+                      next_node -= 1
+
+                  if node_ids[0] != node_ids[-1]:
+                      node_ids.append(node_ids[0])
+
+                  for nid in node_ids:
+                      ET.SubElement(way, "nd", {"ref": str(nid)})
+
+                  tag(way, "boundary", "administrative")
+                  tag(way, "admin_level", "2")
+                  tag(way, "name", name)
+
+          ET.ElementTree(root).write(OUTPUT, encoding="utf-8", xml_declaration=True)
+          print("Created:", OUTPUT)
+          PY
+
+          python convert_world.py
+          ls -lh data/world-countries.osm
+
+      # ============================================
+      #  8 — تحويل السواحل إلى OSM
+      #    (natural=coastline)
+      # ============================================
+      - name: Convert Natural Earth coastline to OSM
+        run: |
+          cat > convert_coastline.py <<'PY'
+          import shapefile
+          import xml.etree.ElementTree as ET
+
+          INPUT = "data/natural-earth/coastline/ne_10m_coastline.shp"
+          OUTPUT = "data/world-coastline.osm"
+
+          sf = shapefile.Reader(INPUT)
+
+          root = ET.Element("osm", {"version": "0.6", "generator": "AlHaswa-NaturalEarth"})
+
+          next_node = -100000000
+          next_way = -100000000
+
+          for shape in sf.shapes():
+              points = shape.points
+              if len(points) < 2:
+                  continue
+
+              way = ET.SubElement(root, "way", {"id": str(next_way), "version": "1"})
+              next_way -= 1
+
+              for lon, lat in points:
+                  node = ET.SubElement(root, "node", {"id": str(next_node), "version": "1", "lat": str(lat), "lon": str(lon)})
+                  ET.SubElement(way, "nd", {"ref": str(next_node)})
+                  next_node -= 1
+
+              ET.SubElement(way, "tag", {"k": "natural", "v": "coastline"})
+
+          ET.ElementTree(root).write(OUTPUT, encoding="utf-8", xml_declaration=True)
+          print("Created:", OUTPUT)
+          PY
+
+          python convert_coastline.py
+          ls -lh data/world-coastline.osm
+
+      # ============================================
+      #  9 — تحويل OSM XML إلى PBF
+      # ============================================
+      - name: Convert world OSM to PBF
+        run: |
+          osmosis --read-xml file=data/world-countries.osm --write-pbf file=data/world-countries.pbf
+          osmosis --read-xml file=data/world-coastline.osm --write-pbf file=data/world-coastline.pbf
+          ls -lh data/world-countries.pbf data/world-coastline.pbf
+
+      # ============================================
+      #  10 — حذف boundary=maritime من اليمن
+      # ============================================
+      - name: Remove maritime boundaries from Yemen
+        run: |
+          osmium tags-filter \
+            data/yemen/yemen.osm.pbf \
+            'r/boundary=maritime' \
+            --invert-match \
+            -o data/yemen/yemen-clean.pbf \
+            --overwrite
+          ls -lh data/yemen/yemen-clean.pbf
+
+      # ============================================
+      #  11 — دمج الكل
+      # ============================================
+      - name: Merge datasets
+        run: |
+          osmium merge \
+            data/world-countries.pbf \
+            data/world-coastline.pbf \
+            data/yemen/yemen-clean.pbf \
+            -o data/AlHaswa-source.pbf \
+            --overwrite
+          ls -lh data/AlHaswa-source.pbf
+
+      # ============================================
+      #  12 — Mapsforge Map Writer 0.25.0
+      # ============================================
+      - name: Download Mapsforge Map Writer 0.25.0
+        run: |
+          wget -O mapsforge-map-writer.jar \
+            "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
+          ls -lh mapsforge-map-writer.jar
+
+      - name: Install Mapsforge plugin
+        run: |
+          mkdir -p ~/.openstreetmap/osmosis/plugins
+          cp mapsforge-map-writer.jar ~/.openstreetmap/osmosis/plugins/
+
+      # ============================================
+      #  13 — إنشاء AlHaswa.map
+      # ============================================
+      - name: Generate AlHaswa.map
+        run: |
+          mkdir -p app/src/main/assets
+
+          osmosis \
+            --read-pbf file=data/AlHaswa-source.pbf \
+            --map-writer \
+            file=app/src/main/assets/AlHaswa.map \
+            type=ram \
+            map-start-position=15.3694,44.1910 \
+            map-start-zoom=6
+
+          ls -lh app/src/main/assets/AlHaswa.map
+
+      # ============================================
+      #  14 — التحقق
+      # ============================================
+      - name: Verify map
+        run: |
+          FILE="app/src/main/assets/AlHaswa.map"
+
+          if [ ! -s "$FILE" ]; then
+            echo "ERROR: AlHaswa.map is missing or empty!"
+            exit 1
+          fi
+
+          SIZE=$(stat -c%s "$FILE")
+          if [ "$SIZE" -lt 50000 ]; then
+            echo "ERROR: AlHaswa.map is only $SIZE bytes — too small!"
+            exit 1
+          fi
+
+          echo "======================================"
+          echo "AlHaswa.map created successfully"
+          echo "Size: $(ls -lh $FILE | awk '{print $5}')"
+          echo "======================================"
+
+      # ============================================
+      #  15 — حفظ الخريطة في المستودع
+      # ============================================
+      - name: Commit map
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+          git add app/src/main/assets/AlHaswa.map
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: generate unified AlHaswa map [skip ci]"
+            git push
+          fi
