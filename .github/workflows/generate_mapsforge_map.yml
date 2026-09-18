@@ -8,23 +8,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       # ---------------------------------------------------------
-      # 1) جلب المشروع
+      # 1. جلب المستودع
       # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ---------------------------------------------------------
-      # 2) Java 17
+      # 2. Java 21
       # ---------------------------------------------------------
-      - name: Setup Java 17
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # ---------------------------------------------------------
-      # 3) Python
+      # 3. Python
       # ---------------------------------------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -32,7 +33,7 @@ jobs:
           python-version: '3.11'
 
       # ---------------------------------------------------------
-      # 4) الأدوات المطلوبة
+      # 4. تثبيت الأدوات
       # ---------------------------------------------------------
       - name: Install tools
         run: |
@@ -47,7 +48,7 @@ jobs:
           pip install --upgrade pyshp shapely
 
       # ---------------------------------------------------------
-      # 5) تنزيل Natural Earth
+      # 5. تنزيل Natural Earth
       # ---------------------------------------------------------
       - name: Download Natural Earth
         run: |
@@ -66,7 +67,7 @@ jobs:
             -d data/natural-earth/coastline
 
       # ---------------------------------------------------------
-      # 6) تنزيل اليمن التفصيلي من Geofabrik
+      # 6. تنزيل بيانات اليمن التفصيلية
       # ---------------------------------------------------------
       - name: Download detailed Yemen OSM data
         run: |
@@ -78,15 +79,7 @@ jobs:
           ls -lh data/yemen/yemen.osm.pbf
 
       # ---------------------------------------------------------
-      # 7) إنشاء OSM عالمي مبسط من Natural Earth
-      #
-      # كل دولة:
-      #   natural=land
-      #   boundary=administrative
-      #   admin_level=2
-      #   name=اسم الدولة
-      #
-      # لا يتم إنشاء boundary=maritime.
+      # 7. تحويل حدود الدول من Natural Earth إلى OSM
       # ---------------------------------------------------------
       - name: Convert Natural Earth countries to OSM
         run: |
@@ -125,6 +118,7 @@ jobs:
 
               fields = sf.fields[1:]
               values = list(record)
+
               attrs = {
                   fields[i][0]: values[i]
                   for i in range(len(fields))
@@ -154,7 +148,9 @@ jobs:
                   way = ET.SubElement(
                       root,
                       "way",
-                      {"id": str(next_way)}
+                      {
+                          "id": str(next_way)
+                      }
                   )
 
                   next_way -= 1
@@ -176,15 +172,15 @@ jobs:
                       node_ids.append(next_node)
                       next_node -= 1
 
-                  # إغلاق المضلع
                   for node_id in node_ids:
                       ET.SubElement(
                           way,
                           "nd",
-                          {"ref": str(node_id)}
+                          {
+                              "ref": str(node_id)
+                          }
                       )
 
-                  # حدود دولة برية
                   add_tag(
                       way,
                       "boundary",
@@ -203,7 +199,6 @@ jobs:
                       name
                   )
 
-                  # يسمح لـMapsforge برؤية اليابسة
                   add_tag(
                       way,
                       "natural",
@@ -211,6 +206,7 @@ jobs:
                   )
 
           tree = ET.ElementTree(root)
+
           tree.write(
               OUTPUT,
               encoding="utf-8",
@@ -225,16 +221,12 @@ jobs:
           ls -lh data/world-countries.osm
 
       # ---------------------------------------------------------
-      # 8) تحويل السواحل إلى OSM
-      #
-      # فقط natural=coastline
-      # لا boundary=maritime
+      # 8. تحويل السواحل إلى OSM
       # ---------------------------------------------------------
       - name: Convert Natural Earth coastline to OSM
         run: |
           cat > convert_coastline.py <<'PY'
           import shapefile
-          import os
           import xml.etree.ElementTree as ET
 
           INPUT = "data/natural-earth/coastline/ne_10m_coastline.shp"
@@ -263,7 +255,9 @@ jobs:
               way = ET.SubElement(
                   root,
                   "way",
-                  {"id": str(next_way)}
+                  {
+                      "id": str(next_way)
+                  }
               )
 
               next_way -= 1
@@ -283,7 +277,9 @@ jobs:
                   ET.SubElement(
                       way,
                       "nd",
-                      {"ref": str(next_node)}
+                      {
+                          "ref": str(next_node)
+                      }
                   )
 
                   next_node -= 1
@@ -311,9 +307,9 @@ jobs:
           ls -lh data/world-coastline.osm
 
       # ---------------------------------------------------------
-      # 9) تحويل ملفات العالم إلى PBF
+      # 9. تحويل العالم إلى PBF
       # ---------------------------------------------------------
-      - name: Convert world OSM XML to PBF
+      - name: Convert world OSM to PBF
         run: |
           osmosis \
             --read-xml file=data/world-countries.osm \
@@ -324,10 +320,7 @@ jobs:
             --write-pbf file=data/world-coastline.pbf
 
       # ---------------------------------------------------------
-      # 10) تنظيف اليمن من maritime relations
-      #
-      # نحذف العلاقات التي تحمل boundary=maritime.
-      # لا نحذف الطرق أو المدن أو القرى أو السواحل.
+      # 10. إزالة حدود maritime من اليمن
       # ---------------------------------------------------------
       - name: Remove maritime boundaries from Yemen
         run: |
@@ -338,12 +331,10 @@ jobs:
             -o data/yemen/yemen-clean.pbf \
             --overwrite
 
-          echo "Yemen cleaned."
-
           ls -lh data/yemen/yemen-clean.pbf
 
       # ---------------------------------------------------------
-      # 11) دمج العالم + السواحل + اليمن
+      # 11. دمج العالم + السواحل + اليمن
       # ---------------------------------------------------------
       - name: Merge world and Yemen
         run: |
@@ -357,7 +348,7 @@ jobs:
           ls -lh data/AlHaswa-source.pbf
 
       # ---------------------------------------------------------
-      # 12) تنزيل Mapsforge Map Writer 0.25.0
+      # 12. تنزيل Mapsforge Map Writer 0.25.0
       # ---------------------------------------------------------
       - name: Download Mapsforge Map Writer 0.25.0
         run: |
@@ -367,20 +358,21 @@ jobs:
           ls -lh mapsforge-map-writer.jar
 
       # ---------------------------------------------------------
-      # 13) إنشاء ملف Mapsforge
-      #
-      # ملاحظة:
-      # نستخدم نفس أسلوب Map Writer/Osmosis المستخدم
-      # في بناء خريطة اليمن الحالية.
+      # 13. إضافة Map Writer إلى Osmosis
       # ---------------------------------------------------------
-      - name: Generate AlHaswa.map
+      - name: Install Mapsforge Osmosis plugin
         run: |
-          mkdir -p app/src/main/assets
-
           mkdir -p ~/.openstreetmap/osmosis/plugins
 
           cp mapsforge-map-writer.jar \
             ~/.openstreetmap/osmosis/plugins/
+
+      # ---------------------------------------------------------
+      # 14. إنشاء AlHaswa.map
+      # ---------------------------------------------------------
+      - name: Generate AlHaswa.map
+        run: |
+          mkdir -p app/src/main/assets
 
           osmosis \
             --read-pbf file=data/AlHaswa-source.pbf \
@@ -393,7 +385,7 @@ jobs:
           ls -lh app/src/main/assets/AlHaswa.map
 
       # ---------------------------------------------------------
-      # 14) فحص الملف
+      # 15. التأكد من إنشاء الملف
       # ---------------------------------------------------------
       - name: Verify generated map
         run: |
@@ -406,7 +398,7 @@ jobs:
           ls -lh app/src/main/assets/AlHaswa.map
 
       # ---------------------------------------------------------
-      # 15) حفظ الملف داخل المستودع
+      # 16. حفظ الخريطة في GitHub
       # ---------------------------------------------------------
       - name: Commit generated map
         run: |
