@@ -16,7 +16,6 @@ import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
-import org.mapsforge.map.datastore.MapDataStore;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
@@ -31,6 +30,7 @@ public class MainActivity extends Activity {
     private LinearLayout mainLayout;
 
     private MapView mapView;
+
     private TileCache worldTileCache;
     private TileCache yemenTileCache;
 
@@ -395,9 +395,6 @@ public class MainActivity extends Activity {
         mainLayout.addView(card);
     }
 
-    /*
-     * نسخ ملف من assets إلى ذاكرة التطبيق.
-     */
     private File copyAssetToInternal(
             String assetName,
             String outputName
@@ -462,12 +459,32 @@ public class MainActivity extends Activity {
         );
     }
 
-    private XmlRenderTheme getRenderTheme() {
+    /*
+     * ثيم خريطة اليمن
+     */
+    private XmlRenderTheme getYemenRenderTheme() {
 
         return new AssetsRenderTheme(
                 getAssets(),
                 "rendertheme/",
                 "osmarender.xml",
+                null
+        );
+    }
+
+    /*
+     * ثيم العالم
+     *
+     * هذا الثيم لا يرسم البحر ولا يلون الخريطة.
+     * يرسم فقط حدود الدول وأسماء الدول
+     * إذا كانت موجودة داخل world.map.
+     */
+    private XmlRenderTheme getWorldRenderTheme() {
+
+        return new AssetsRenderTheme(
+                getAssets(),
+                "rendertheme/",
+                "world.xml",
                 null
         );
     }
@@ -504,268 +521,4 @@ public class MainActivity extends Activity {
                 back,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        mapView =
-                new MapView(this);
-
-        mapView.setClickable(true);
-        mapView.setFocusable(true);
-
-        layout.addView(
-                mapView,
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        0,
-                        1
-                )
-        );
-
-        setContentView(layout);
-
-        back.setOnClickListener(
-                v -> {
-
-                    destroyMaps();
-
-                    showHome();
-                }
-        );
-
-        try {
-
-            /*
-             * ==============================
-             * تحميل العالم
-             * ==============================
-             */
-
-            File worldFile =
-                    getWorldFile();
-
-            worldMap =
-                    new MapFile(worldFile);
-
-            /*
-             * ==============================
-             * تحميل اليمن
-             * ==============================
-             */
-
-            File yemenFile =
-                    getYemenFile();
-
-            yemenMap =
-                    new MapFile(yemenFile);
-
-            int tileSize =
-                    mapView
-                            .getModel()
-                            .displayModel
-                            .getTileSize();
-
-            /*
-             * ==============================
-             * طبقة العالم
-             * ==============================
-             */
-
-            worldTileCache =
-                    AndroidUtil.createTileCache(
-                            this,
-                            "world-map-cache",
-                            tileSize,
-                            2f,
-                            2f
-                    );
-
-            TileRendererLayer worldLayer =
-                    new TileRendererLayer(
-                            worldTileCache,
-                            worldMap,
-                            mapView
-                                    .getModel()
-                                    .mapViewPosition,
-                            false,
-                            true,
-                            false,
-                            AndroidGraphicFactory.INSTANCE
-                    );
-
-            worldLayer.setXmlRenderTheme(
-                    getRenderTheme()
-            );
-
-            /*
-             * ==============================
-             * طبقة اليمن
-             * ==============================
-             */
-
-            yemenTileCache =
-                    AndroidUtil.createTileCache(
-                            this,
-                            "yemen-map-cache",
-                            tileSize,
-                            2f,
-                            2f
-                    );
-
-            TileRendererLayer yemenLayer =
-                    new TileRendererLayer(
-                            yemenTileCache,
-                            yemenMap,
-                            mapView
-                                    .getModel()
-                                    .mapViewPosition,
-                            false,
-                            true,
-                            false,
-                            AndroidGraphicFactory.INSTANCE
-                    );
-
-            yemenLayer.setXmlRenderTheme(
-                    getRenderTheme()
-            );
-
-            /*
-             * العالم أولاً
-             */
-            mapView
-                    .getLayerManager()
-                    .getLayers()
-                    .add(worldLayer);
-
-            /*
-             * اليمن فوق العالم
-             */
-            mapView
-                    .getLayerManager()
-                    .getLayers()
-                    .add(yemenLayer);
-
-            /*
-             * ==============================
-             * مركز البداية: اليمن
-             * ==============================
-             */
-
-            mapView.setCenter(
-                    new LatLong(
-                            15.5527,
-                            48.5164
-                    )
-            );
-
-            /*
-             * نبدأ على مستوى 6
-             * حتى تظهر مساحة أكبر من العالم.
-             */
-            mapView.setZoomLevel(
-                    (byte) 6
-            );
-
-            mapView.invalidate();
-
-            long yemenSize =
-                    yemenFile.length()
-                            / 1024
-                            / 1024;
-
-            long worldSize =
-                    worldFile.length()
-                            / 1024
-                            / 1024;
-
-            Toast.makeText(
-                    this,
-                    "تم تحميل الخريطتين\n"
-                            + "اليمن: "
-                            + yemenSize
-                            + " MB\n"
-                            + "العالم: "
-                            + worldSize
-                            + " MB",
-                    Toast.LENGTH_LONG
-            ).show();
-
-        } catch (Exception e) {
-
-            Toast.makeText(
-                    this,
-                    "خطأ في تحميل الخريطة:\n"
-                            + e.getClass()
-                            .getSimpleName()
-                            + "\n"
-                            + e.getMessage(),
-                    Toast.LENGTH_LONG
-            ).show();
-        }
-    }
-
-    private void destroyMaps() {
-
-        if (mapView != null) {
-
-            try {
-                mapView.destroyAll();
-            } catch (Exception ignored) {
-            }
-
-            mapView = null;
-        }
-
-        if (worldTileCache != null) {
-
-            try {
-                worldTileCache.destroy();
-            } catch (Exception ignored) {
-            }
-
-            worldTileCache = null;
-        }
-
-        if (yemenTileCache != null) {
-
-            try {
-                yemenTileCache.destroy();
-            } catch (Exception ignored) {
-            }
-
-            yemenTileCache = null;
-        }
-
-        if (worldMap != null) {
-
-            try {
-                worldMap.close();
-            } catch (Exception ignored) {
-            }
-
-            worldMap = null;
-        }
-
-        if (yemenMap != null) {
-
-            try {
-                yemenMap.close();
-            } catch (Exception ignored) {
-            }
-
-            yemenMap = null;
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-
-        destroyMaps();
-
-        AndroidGraphicFactory
-                .clearResourceMemoryCache();
-
-        super.onDestroy();
-    }
-}
+                        LinearLayout.LayoutParams.WRAP
