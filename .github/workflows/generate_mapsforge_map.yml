@@ -9,32 +9,21 @@ jobs:
 
     steps:
 
-      # ---------------------------------------------------------
-      # 1. جلب المستودع
-      # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ---------------------------------------------------------
-      # 2. Java 21
-      # ---------------------------------------------------------
+      # Java 21 مطلوب لـ Osmosis الموجود في GitHub Actions
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      # ---------------------------------------------------------
-      # 3. Python
-      # ---------------------------------------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # ---------------------------------------------------------
-      # 4. تثبيت الأدوات
-      # ---------------------------------------------------------
       - name: Install tools
         run: |
           sudo apt-get update
@@ -45,10 +34,10 @@ jobs:
             osmosis \
             python3-pip
 
-          pip install --upgrade pyshp shapely
+          pip install --upgrade pyshp
 
       # ---------------------------------------------------------
-      # 5. تنزيل Natural Earth
+      # تنزيل Natural Earth
       # ---------------------------------------------------------
       - name: Download Natural Earth
         run: |
@@ -67,9 +56,9 @@ jobs:
             -d data/natural-earth/coastline
 
       # ---------------------------------------------------------
-      # 6. تنزيل بيانات اليمن التفصيلية
+      # تنزيل اليمن بالتفصيل الكامل
       # ---------------------------------------------------------
-      - name: Download detailed Yemen OSM data
+      - name: Download Yemen OSM
         run: |
           mkdir -p data/yemen
 
@@ -79,13 +68,12 @@ jobs:
           ls -lh data/yemen/yemen.osm.pbf
 
       # ---------------------------------------------------------
-      # 7. تحويل حدود الدول من Natural Earth إلى OSM
+      # تحويل حدود الدول إلى OSM صحيح
       # ---------------------------------------------------------
-      - name: Convert Natural Earth countries to OSM
+      - name: Convert Natural Earth countries
         run: |
           cat > convert_world.py <<'PY'
           import shapefile
-          import os
           import xml.etree.ElementTree as ET
 
           INPUT = "data/natural-earth/countries/ne_10m_admin_0_countries.shp"
@@ -104,7 +92,7 @@ jobs:
           next_node = -1
           next_way = -1
 
-          def add_tag(parent, key, value):
+          def tag(parent, key, value):
               ET.SubElement(
                   parent,
                   "tag",
@@ -125,9 +113,9 @@ jobs:
               }
 
               name = (
-                  attrs.get("NAME_AR")
-                  or attrs.get("NAME")
+                  attrs.get("NAME")
                   or attrs.get("ADMIN")
+                  or attrs.get("SOVEREIGNT")
                   or "Unknown"
               )
 
@@ -137,10 +125,9 @@ jobs:
 
               for p in range(len(parts) - 1):
 
-                  start = parts[p]
-                  end = parts[p + 1]
-
-                  ring = points[start:end]
+                  ring = points[
+                      parts[p]:parts[p + 1]
+                  ]
 
                   if len(ring) < 3:
                       continue
@@ -149,7 +136,8 @@ jobs:
                       root,
                       "way",
                       {
-                          "id": str(next_way)
+                          "id": str(next_way),
+                          "version": "1"
                       }
                   )
 
@@ -164,6 +152,7 @@ jobs:
                           "node",
                           {
                               "id": str(next_node),
+                              "version": "1",
                               "lat": str(lat),
                               "lon": str(lon)
                           }
@@ -171,6 +160,10 @@ jobs:
 
                       node_ids.append(next_node)
                       next_node -= 1
+
+                  # إغلاق الحلقة
+                  if node_ids[0] != node_ids[-1]:
+                      node_ids.append(node_ids[0])
 
                   for node_id in node_ids:
                       ET.SubElement(
@@ -181,28 +174,23 @@ jobs:
                           }
                       )
 
-                  add_tag(
+                  # حدود الدول البرية
+                  tag(
                       way,
                       "boundary",
                       "administrative"
                   )
 
-                  add_tag(
+                  tag(
                       way,
                       "admin_level",
                       "2"
                   )
 
-                  add_tag(
+                  tag(
                       way,
                       "name",
                       name
-                  )
-
-                  add_tag(
-                      way,
-                      "natural",
-                      "land"
                   )
 
           tree = ET.ElementTree(root)
@@ -221,9 +209,9 @@ jobs:
           ls -lh data/world-countries.osm
 
       # ---------------------------------------------------------
-      # 8. تحويل السواحل إلى OSM
+      # تحويل السواحل
       # ---------------------------------------------------------
-      - name: Convert Natural Earth coastline to OSM
+      - name: Convert Natural Earth coastline
         run: |
           cat > convert_coastline.py <<'PY'
           import shapefile
@@ -256,7 +244,8 @@ jobs:
                   root,
                   "way",
                   {
-                      "id": str(next_way)
+                      "id": str(next_way),
+                      "version": "1"
                   }
               )
 
@@ -269,6 +258,7 @@ jobs:
                       "node",
                       {
                           "id": str(next_node),
+                          "version": "1",
                           "lat": str(lat),
                           "lon": str(lon)
                       }
@@ -307,7 +297,7 @@ jobs:
           ls -lh data/world-coastline.osm
 
       # ---------------------------------------------------------
-      # 9. تحويل العالم إلى PBF
+      # تحويل العالم إلى PBF
       # ---------------------------------------------------------
       - name: Convert world OSM to PBF
         run: |
@@ -320,9 +310,9 @@ jobs:
             --write-pbf file=data/world-coastline.pbf
 
       # ---------------------------------------------------------
-      # 10. إزالة حدود maritime من اليمن
+      # حذف العلاقات البحرية فقط من اليمن
       # ---------------------------------------------------------
-      - name: Remove maritime boundaries from Yemen
+      - name: Remove maritime boundaries
         run: |
           osmium tags-filter \
             data/yemen/yemen.osm.pbf \
@@ -334,9 +324,9 @@ jobs:
           ls -lh data/yemen/yemen-clean.pbf
 
       # ---------------------------------------------------------
-      # 11. دمج العالم + السواحل + اليمن
+      # دمج العالم + السواحل + اليمن
       # ---------------------------------------------------------
-      - name: Merge world and Yemen
+      - name: Merge datasets
         run: |
           osmium merge \
             data/world-countries.pbf \
@@ -348,7 +338,7 @@ jobs:
           ls -lh data/AlHaswa-source.pbf
 
       # ---------------------------------------------------------
-      # 12. تنزيل Mapsforge Map Writer 0.25.0
+      # Mapsforge Map Writer 0.25.0
       # ---------------------------------------------------------
       - name: Download Mapsforge Map Writer 0.25.0
         run: |
@@ -357,10 +347,7 @@ jobs:
 
           ls -lh mapsforge-map-writer.jar
 
-      # ---------------------------------------------------------
-      # 13. إضافة Map Writer إلى Osmosis
-      # ---------------------------------------------------------
-      - name: Install Mapsforge Osmosis plugin
+      - name: Install Mapsforge plugin
         run: |
           mkdir -p ~/.openstreetmap/osmosis/plugins
 
@@ -368,7 +355,7 @@ jobs:
             ~/.openstreetmap/osmosis/plugins/
 
       # ---------------------------------------------------------
-      # 14. إنشاء AlHaswa.map
+      # إنشاء AlHaswa.map
       # ---------------------------------------------------------
       - name: Generate AlHaswa.map
         run: |
@@ -385,22 +372,22 @@ jobs:
           ls -lh app/src/main/assets/AlHaswa.map
 
       # ---------------------------------------------------------
-      # 15. التأكد من إنشاء الملف
+      # التحقق
       # ---------------------------------------------------------
-      - name: Verify generated map
+      - name: Verify map
         run: |
           test -s app/src/main/assets/AlHaswa.map
 
           echo "======================================"
-          echo "AlHaswa.map generated successfully"
+          echo "AlHaswa.map created successfully"
           echo "======================================"
 
           ls -lh app/src/main/assets/AlHaswa.map
 
       # ---------------------------------------------------------
-      # 16. حفظ الخريطة في GitHub
+      # حفظ الخريطة
       # ---------------------------------------------------------
-      - name: Commit generated map
+      - name: Commit map
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
@@ -410,8 +397,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit \
-              -m "chore: generate unified AlHaswa Mapsforge map"
-
+            git commit -m "chore: generate unified AlHaswa map"
             git push
           fi
