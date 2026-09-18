@@ -13,11 +13,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Install System Dependencies (Osmosis, Osmium, wget)
         run: |
@@ -29,27 +29,18 @@ jobs:
           echo "Downloading Yemen detailed OSM data from Geofabrik..."
           wget -O yemen.osm.pbf "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"
 
-          echo "Downloading low-detail World boundaries / continent extract..."
-          # استخدام مقتطف جغرافى عالمي يحتوي على حدود الدول وأسمائها فقط بدون تفاصيل مدن العالم
+          echo "Downloading World boundaries extract..."
           wget -O world-low.osm.pbf "https://download.geofabrik.de/africa-latest.osm.pbf" || true
-          # أو بدلاً من ذلك، استخدام خريطة القارة أو مقتطف خفيف مع تصفية العناصر
-          # لضمان حدود العالم البرية وأسماء الدول فقط:
-          wget -O planet-boundaries.osm.pbf "https://download.geofabrik.de/europe/monaco-latest.osm.pbf" || true
-
-          # سنستخدم ملف دمج مرن يدمج اليمن مع المقتطف العالمي للحدود
-          echo "Data download completed."
 
       - name: Filter Out Maritime Boundaries & Unwanted Details
         run: |
           echo "Filtering Yemen data to remove maritime boundaries and keep full details..."
-          # إزالة أي حدود بحرية أو مياه إقليمية من بيانات اليمن
           osmium tags-filter yemen.osm.pbf \
             'r/boundary!=maritime' 'w/boundary!=maritime' \
             'r/maritime=yes' 'w/maritime=yes' \
             -o yemen-clean.osm.pbf
 
-          echo "Filtering World data to keep only country boundaries and names, stripping local cities/roads..."
-          # الاحتفاظ فقط بالحدود السياسية والدول وأسماء القارات/الدول وحذف تفاصيل الطرق والقرى خارج اليمن
+          echo "Filtering World data to keep only country boundaries and names..."
           osmium tags-filter world-low.osm.pbf \
             'boundary=administrative' \
             'place=country' \
@@ -60,7 +51,6 @@ jobs:
             -o world-clean.osm.pbf
 
           echo "Merging World boundaries and Yemen detailed data into a single PBF..."
-          # استخدام Osmosis لدمج الملفين معاً في ملف PBF موحد
           osmosis \
             --read-pbf file="world-clean.osm.pbf" \
             --read-pbf file="yemen-clean.osm.pbf" \
@@ -69,14 +59,12 @@ jobs:
 
       - name: Setup Osmosis with Mapsforge 0.25.0 Map Writer Plugin
         run: |
-          # تجهيز هيكل إضافات Osmosis لتشغيل خوارزمية الإنتاج الخاصة بـ Mapsforge 0.25.0
           mkdir -p ~/.osmosis/plugins
           wget -O ~/.osmosis/plugins/mapsforge-map-writer-jar-with-dependencies.jar \
             "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
 
       - name: Generate Mapsforge Vector Map (.map) via Osmosis
         run: |
-          # استدعاء أداة Map-Writer عبر Osmosis لإنتاج ملف AlHaswa.map الموحد والمتوافق مع 0.25.0
           osmosis \
             --read-pbf file="merged-final.osm.pbf" \
             --mapfile-writer \
@@ -98,5 +86,5 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add app/src/main/assets/AlHaswa.map
-          git commit -m "chore: auto-generate unified AlHaswa.map for Mapsforge 0.25.0" || echo "No changes to commit"
+          git commit -m "chore: auto-generate unified AlHaswa.map with Java 21" || echo "No changes to commit"
           git push
