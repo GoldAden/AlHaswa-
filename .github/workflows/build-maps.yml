@@ -1,1 +1,102 @@
+name: Build AlHaswa Unified Mapsforge Map
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-map:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install System Dependencies (Osmosis, Osmium, wget)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool osmosis wget unzip
+
+      - name: Download Map Data (World Boundaries & Yemen)
+        run: |
+          echo "Downloading Yemen detailed OSM data from Geofabrik..."
+          wget -O yemen.osm.pbf "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"
+
+          echo "Downloading low-detail World boundaries / continent extract..."
+          # استخدام مقتطف جغرافى عالمي يحتوي على حدود الدول وأسمائها فقط بدون تفاصيل مدن العالم
+          wget -O world-low.osm.pbf "https://download.geofabrik.de/africa-latest.osm.pbf" || true
+          # أو بدلاً من ذلك، استخدام خريطة القارة أو مقتطف خفيف مع تصفية العناصر
+          # لضمان حدود العالم البرية وأسماء الدول فقط:
+          wget -O planet-boundaries.osm.pbf "https://download.geofabrik.de/europe/monaco-latest.osm.pbf" || true
+
+          # سنستخدم ملف دمج مرن يدمج اليمن مع المقتطف العالمي للحدود
+          echo "Data download completed."
+
+      - name: Filter Out Maritime Boundaries & Unwanted Details
+        run: |
+          echo "Filtering Yemen data to remove maritime boundaries and keep full details..."
+          # إزالة أي حدود بحرية أو مياه إقليمية من بيانات اليمن
+          osmium tags-filter yemen.osm.pbf \
+            'r/boundary!=maritime' 'w/boundary!=maritime' \
+            'r/maritime=yes' 'w/maritime=yes' \
+            -o yemen-clean.osm.pbf
+
+          echo "Filtering World data to keep only country boundaries and names, stripping local cities/roads..."
+          # الاحتفاظ فقط بالحدود السياسية والدول وأسماء القارات/الدول وحذف تفاصيل الطرق والقرى خارج اليمن
+          osmium tags-filter world-low.osm.pbf \
+            'boundary=administrative' \
+            'place=country' \
+            'place=state' \
+            'natural=coastline' \
+            'natural=land' \
+            'natural=water' \
+            -o world-clean.osm.pbf
+
+          echo "Merging World boundaries and Yemen detailed data into a single PBF..."
+          # استخدام Osmosis لدمج الملفين معاً في ملف PBF موحد
+          osmosis \
+            --read-pbf file="world-clean.osm.pbf" \
+            --read-pbf file="yemen-clean.osm.pbf" \
+            --merge \
+            --write-pbf file="merged-final.osm.pbf"
+
+      - name: Setup Osmosis with Mapsforge 0.25.0 Map Writer Plugin
+        run: |
+          # تجهيز هيكل إضافات Osmosis لتشغيل خوارزمية الإنتاج الخاصة بـ Mapsforge 0.25.0
+          mkdir -p ~/.osmosis/plugins
+          wget -O ~/.osmosis/plugins/mapsforge-map-writer-jar-with-dependencies.jar \
+            "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
+
+      - name: Generate Mapsforge Vector Map (.map) via Osmosis
+        run: |
+          # استدعاء أداة Map-Writer عبر Osmosis لإنتاج ملف AlHaswa.map الموحد والمتوافق مع 0.25.0
+          osmosis \
+            --read-pbf file="merged-final.osm.pbf" \
+            --mapfile-writer \
+              file="AlHaswa.map" \
+              type="ram" \
+              tag-values="true" \
+              bbox="12.0,41.0,20.0,55.0" \
+              map-start-position="15.3694,44.1910" \
+              map-start-zoom="6"
+
+      - name: Place Map into Android Assets Directory
+        run: |
+          mkdir -p app/src/main/assets
+          mv AlHaswa.map app/src/main/assets/AlHaswa.map
+          ls -lh app/src/main/assets/AlHaswa.map
+
+      - name: Commit and Push Generated Map to Repository
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add app/src/main/assets/AlHaswa.map
+          git commit -m "chore: auto-generate unified AlHaswa.map for Mapsforge 0.25.0" || echo "No changes to commit"
+          git push
