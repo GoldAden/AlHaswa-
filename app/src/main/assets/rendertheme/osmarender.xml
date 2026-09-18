@@ -23,6 +23,11 @@
             stroke-width="0.7"/>
     </rule>
 
+    <rule e="way" k="water" v="*">
+        <area fill="#9FD4E5"/>
+    </rule>
+
+
     <!-- ========================= -->
     <!-- اليابسة -->
     <!-- ========================= -->
@@ -31,11 +36,15 @@
         <area fill="#E8E3D8"/>
     </rule>
 
-    <rule e="way" k="natural" v="wood|forest">
+    <rule e="way" k="landuse" v="forest">
         <area fill="#C9D8B5"/>
     </rule>
 
-    <rule e="way" k="landuse" v="forest">
+    <rule e="way" k="natural" v="wood">
+        <area fill="#C9D8B5"/>
+    </rule>
+
+    <rule e="way" k="natural" v="forest">
         <area fill="#C9D8B5"/>
     </rule>
 
@@ -55,13 +64,10 @@
         <area fill="#CFC8B8"/>
     </rule>
 
-    <!-- ========================= -->
-    <!-- المياه والأنهار -->
-    <!-- ========================= -->
 
-    <rule e="way" k="water" v="*">
-        <area fill="#9FD4E5"/>
-    </rule>
+    <!-- ========================= -->
+    <!-- الأنهار -->
+    <!-- ========================= -->
 
     <rule e="way" k="waterway" v="river|canal">
         <line
@@ -75,35 +81,34 @@
             stroke-width="0.6"/>
     </rule>
 
+
     <!-- ========================= -->
-    <!-- الحدود الدولية -->
+    <!-- الحدود البرية الدولية فقط -->
     <!-- ========================= -->
 
-    <rule
-        e="way"
-        k="boundary"
-        v="administrative">
+    <rule e="way" k="boundary" v="administrative">
 
-        <line
-            stroke="#8B6478"
-            stroke-width="0.8"
-            stroke-dasharray="6,3"/>
+        <rule e="way" k="admin_level" v="2">
+
+            <line
+                stroke="#7D526C"
+                stroke-width="1"
+                stroke-dasharray="6,3"/>
+
+        </rule>
+
     </rule>
 
-    <!-- ========================= -->
-    <!-- الحدود من نوع national -->
-    <!-- ========================= -->
-
-    <rule
-        e="way"
-        k="boundary"
-        v="national">
+    <!-- الحدود الوطنية البرية -->
+    <rule e="way" k="boundary" v="national">
 
         <line
             stroke="#7D526C"
             stroke-width="1"
             stroke-dasharray="6,3"/>
+
     </rule>
+
 
     <!-- ========================= -->
     <!-- الطرق -->
@@ -143,11 +148,7 @@
             stroke-width="0.25"/>
     </rule>
 
-    <rule
-        e="way"
-        k="highway"
-        v="residential|unclassified">
-
+    <rule e="way" k="highway" v="residential|unclassified">
         <line
             stroke="#FFFFFF"
             stroke-width="0.9"/>
@@ -162,6 +163,7 @@
             stroke="#C2BEB6"
             stroke-width="0.35"/>
     </rule>
+
 
     <!-- ========================= -->
     <!-- المدن -->
@@ -214,14 +216,12 @@
             priority="6"/>
     </rule>
 
+
     <!-- ========================= -->
     <!-- أسماء الدول -->
     <!-- ========================= -->
 
-    <rule
-        e="node"
-        k="place"
-        v="country">
+    <rule e="node" k="place" v="country">
 
         <caption
             k="name"
@@ -233,14 +233,12 @@
             priority="20"/>
     </rule>
 
+
     <!-- ========================= -->
     <!-- المناطق -->
     <!-- ========================= -->
 
-    <rule
-        e="node"
-        k="place"
-        v="state|province|region">
+    <rule e="node" k="place" v="state|province|region">
 
         <caption
             k="name"
@@ -251,14 +249,12 @@
             priority="10"/>
     </rule>
 
+
     <!-- ========================= -->
     <!-- أسماء الأنهار -->
     <!-- ========================= -->
 
-    <rule
-        e="way"
-        k="waterway"
-        v="river|canal">
+    <rule e="way" k="waterway" v="river|canal">
 
         <pathText
             k="name"
@@ -267,6 +263,7 @@
             stroke="#FFFFFF"
             stroke-width="1"/>
     </rule>
+
 
     <!-- ========================= -->
     <!-- أسماء الطرق -->
