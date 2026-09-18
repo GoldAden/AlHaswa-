@@ -1,4 +1,4 @@
-name: Build AlHaswa APK
+name: Build Yemen and World Maps
 
 on:
   workflow_dispatch:
@@ -7,97 +7,178 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-maps:
     runs-on: ubuntu-latest
 
     steps:
 
+      # =========================
+      # تحميل المشروع
+      # =========================
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
-      - name: Set up JDK
+
+      # =========================
+      # Java 17
+      # =========================
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
 
+      # =========================
+      # أدوات النظام
+      # =========================
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip osmium-tool
+
+
+      # =========================
+      # إنشاء مجلد الخرائط
+      # =========================
+      - name: Create map directories
+        run: |
+          mkdir -p map-output
+          mkdir -p app/src/main/assets
+
+
+      # ==================================================
+      #                 YEMEN MAP
+      # ==================================================
+
+      # =========================
+      # تحميل بيانات اليمن
+      # =========================
+      - name: Download Yemen OSM data
+        run: |
+          wget -O yemen-latest.osm.pbf \
+            https://download.geofabrik.de/asia/yemen-latest.osm.pbf
+
+
+      # =========================
+      # تحميل Map Writer 0.25.0
+      # =========================
+      - name: Download Mapsforge Map Writer
+        run: |
+          wget -O mapsforge-map-writer-0.25.0.jar \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar
+
+
+      # =========================
+      # إنشاء Yemen.map
+      # =========================
+      - name: Build Yemen.map
+        run: |
+          java -Xmx6g -jar mapsforge-map-writer-0.25.0.jar \
+            --map-file=yemen-latest.osm.pbf \
+            --output-dir=map-output \
+            --map-start-position=15.5527,48.5164 \
+            --map-start-zoom=6 \
+            --preferred-language=ar
+
+
+      # =========================
+      # التحقق من Yemen.map
+      # =========================
       - name: Check Yemen.map
         run: |
-          echo "=== CHECK Yemen.map ==="
-
-          if [ ! -f app/src/main/assets/Yemen.map ]; then
-            echo "ERROR: Yemen.map NOT FOUND"
+          if [ ! -f map-output/Yemen.map ]; then
+            echo "ERROR: Yemen.map was not created."
             exit 1
           fi
 
-          echo "Yemen.map exists."
+          echo "Yemen.map:"
+          ls -lh map-output/Yemen.map
+
+
+      # ==================================================
+      #                 WORLD MAP
+      # ==================================================
+
+      # =========================
+      # تحميل World.map
+      # =========================
+      - name: Download World.map
+        run: |
+          wget -O map-output/world.map \
+            https://download.mapsforge.org/maps/v5/world.map
+
+
+      # =========================
+      # التحقق من World.map
+      # =========================
+      - name: Check world.map
+        run: |
+          if [ ! -f map-output/world.map ]; then
+            echo "ERROR: world.map was not downloaded."
+            exit 1
+          fi
+
+          echo "world.map:"
+          ls -lh map-output/world.map
+
+
+      # ==================================================
+      #       نسخ الخرائط إلى التطبيق
+      # ==================================================
+
+      - name: Copy maps to Android assets
+        run: |
+          cp map-output/Yemen.map \
+            app/src/main/assets/Yemen.map
+
+          cp map-output/world.map \
+            app/src/main/assets/world.map
+
+
+      # =========================
+      # التحقق النهائي
+      # =========================
+      - name: Verify Android assets
+        run: |
+          echo "=== MAP FILES ==="
+
           ls -lh app/src/main/assets/Yemen.map
+          ls -lh app/src/main/assets/world.map
 
-          echo "Exact file size:"
-          stat -c%s app/src/main/assets/Yemen.map
+          echo ""
+          echo "Maps installed successfully:"
+          echo "app/src/main/assets/Yemen.map"
+          echo "app/src/main/assets/world.map"
 
-      - name: Check project structure
-        run: |
-          echo "=== ROOT ==="
-          ls -la
 
-          echo "=== APP ==="
-          ls -la app
-
-          echo "=== ASSETS ==="
-          ls -lh app/src/main/assets/
-
-          echo "=== APP BUILD ==="
-          cat app/build.gradle
-
-          echo "=== SETTINGS ==="
-          cat settings.gradle
-
-      - name: Build APK
-        run: |
-          gradle :app:assembleDebug
-
-      - name: Check APK size
-        run: |
-          echo "=== APK INFORMATION ==="
-
-          ls -lh app/build/outputs/apk/debug/
-
-          echo "APK exact size:"
-          stat -c%s app/build/outputs/apk/debug/app-debug.apk
-
-          echo "APK size in MB:"
-          du -h app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Check Yemen.map inside APK
-        run: |
-          echo "=== SEARCHING FOR Yemen.map INSIDE APK ==="
-
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "Yemen.map" || true
-
-          echo "=== ASSET SIZE INSIDE APK ==="
-
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "assets/Yemen.map" || true
-
-      - name: Verify APK contains Yemen.map
-        run: |
-          if unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -q "assets/Yemen.map"; then
-            echo "SUCCESS: Yemen.map is inside the APK."
-          else
-            echo "ERROR: Yemen.map is NOT inside the APK."
-            exit 1
-          fi
-
-      - name: Upload APK
+      # =========================
+      # رفع الخرائط كـ Artifact
+      # =========================
+      - name: Upload maps
         uses: actions/upload-artifact@v4
         with:
-          name: AlHaswa-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: AlHaswa-Maps
+          path: |
+            app/src/main/assets/Yemen.map
+            app/src/main/assets/world.map
           compression-level: 0
+
+
+      # =========================
+      # حفظ الخرائط داخل GitHub
+      # =========================
+      - name: Commit maps to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add app/src/main/assets/Yemen.map
+          git add app/src/main/assets/world.map
+
+          if git diff --cached --quiet; then
+            echo "No map changes to commit."
+          else
+            git commit -m "Update Yemen and World Maps"
+            git push
+          fi
