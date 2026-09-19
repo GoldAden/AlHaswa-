@@ -71,7 +71,8 @@ jobs:
           ls -lh data/yemen/yemen.osm.pbf
 
       # ============================================
-      #  7 — تحويل حدود الدول (مع timestamp)
+      #  7 — تحويل حدود الدول
+      #    كل nodes أولاً ثم كل ways
       # ============================================
       - name: Convert Natural Earth countries to OSM
         run: |
@@ -84,10 +85,15 @@ jobs:
           TS = "2024-01-01T00:00:00Z"
 
           sf = shapefile.Reader(INPUT, encoding="utf-8")
+
           root = ET.Element("osm", {"version": "0.6", "generator": "AlHaswa-NaturalEarth"})
 
           next_node = -1
           next_way = -1
+
+          # تخزين مؤقت
+          all_nodes = []
+          all_ways = []
 
           def tag(parent, key, value):
               ET.SubElement(parent, "tag", {"k": key, "v": str(value)})
@@ -107,34 +113,44 @@ jobs:
                   if len(ring) < 3:
                       continue
 
-                  way = ET.SubElement(root, "way", {
-                      "id": str(next_way),
-                      "version": "1",
-                      "timestamp": TS
-                  })
+                  way_id = next_way
                   next_way -= 1
 
                   node_ids = []
                   for lon, lat in ring:
-                      ET.SubElement(root, "node", {
-                          "id": str(next_node),
-                          "version": "1",
-                          "lat": str(lat),
-                          "lon": str(lon),
-                          "timestamp": TS
-                      })
-                      node_ids.append(next_node)
+                      nid = next_node
                       next_node -= 1
+                      node_ids.append(nid)
+                      all_nodes.append((nid, lat, lon))
 
                   if node_ids[0] != node_ids[-1]:
                       node_ids.append(node_ids[0])
 
-                  for nid in node_ids:
-                      ET.SubElement(way, "nd", {"ref": str(nid)})
+                  way_data = (way_id, node_ids, name)
+                  all_ways.append(way_data)
 
-                  tag(way, "boundary", "administrative")
-                  tag(way, "admin_level", "2")
-                  tag(way, "name", name)
+          # كتابة كل nodes أولاً
+          for nid, lat, lon in all_nodes:
+              ET.SubElement(root, "node", {
+                  "id": str(nid),
+                  "version": "1",
+                  "lat": str(lat),
+                  "lon": str(lon),
+                  "timestamp": TS
+              })
+
+          # ثم كتابة كل ways
+          for way_id, node_ids, name in all_ways:
+              way_el = ET.SubElement(root, "way", {
+                  "id": str(way_id),
+                  "version": "1",
+                  "timestamp": TS
+              })
+              for nid in node_ids:
+                  ET.SubElement(way_el, "nd", {"ref": str(nid)})
+              tag(way_el, "boundary", "administrative")
+              tag(way_el, "admin_level", "2")
+              tag(way_el, "name", name)
 
           ET.ElementTree(root).write(OUTPUT, encoding="utf-8", xml_declaration=True)
           print("Created:", OUTPUT)
@@ -144,7 +160,8 @@ jobs:
           ls -lh data/world-countries.osm
 
       # ============================================
-      #  8 — تحويل السواحل (مع timestamp)
+      #  8 — تحويل السواحل
+      #    كل nodes أولاً ثم كل ways
       # ============================================
       - name: Convert Natural Earth coastline to OSM
         run: |
@@ -157,35 +174,52 @@ jobs:
           TS = "2024-01-01T00:00:00Z"
 
           sf = shapefile.Reader(INPUT)
+
           root = ET.Element("osm", {"version": "0.6", "generator": "AlHaswa-NaturalEarth"})
 
           next_node = -100000000
           next_way = -100000000
+
+          all_nodes = []
+          all_ways = []
 
           for shape in sf.shapes():
               points = shape.points
               if len(points) < 2:
                   continue
 
-              way = ET.SubElement(root, "way", {
-                  "id": str(next_way),
+              way_id = next_way
+              next_way -= 1
+
+              node_ids = []
+              for lon, lat in points:
+                  nid = next_node
+                  next_node -= 1
+                  node_ids.append(nid)
+                  all_nodes.append((nid, lat, lon))
+
+              all_ways.append((way_id, node_ids))
+
+          # كتابة كل nodes أولاً
+          for nid, lat, lon in all_nodes:
+              ET.SubElement(root, "node", {
+                  "id": str(nid),
+                  "version": "1",
+                  "lat": str(lat),
+                  "lon": str(lon),
+                  "timestamp": TS
+              })
+
+          # ثم كتابة كل ways
+          for way_id, node_ids in all_ways:
+              way_el = ET.SubElement(root, "way", {
+                  "id": str(way_id),
                   "version": "1",
                   "timestamp": TS
               })
-              next_way -= 1
-
-              for lon, lat in points:
-                  ET.SubElement(root, "node", {
-                      "id": str(next_node),
-                      "version": "1",
-                      "lat": str(lat),
-                      "lon": str(lon),
-                      "timestamp": TS
-                  })
-                  ET.SubElement(way, "nd", {"ref": str(next_node)})
-                  next_node -= 1
-
-              ET.SubElement(way, "tag", {"k": "natural", "v": "coastline"})
+              for nid in node_ids:
+                  ET.SubElement(way_el, "nd", {"ref": str(nid)})
+              ET.SubElement(way_el, "tag", {"k": "natural", "v": "coastline"})
 
           ET.ElementTree(root).write(OUTPUT, encoding="utf-8", xml_declaration=True)
           print("Created:", OUTPUT)
