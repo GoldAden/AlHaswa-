@@ -38,8 +38,7 @@ jobs:
           osmium --version
 
       # ============================================
-      #  4 — تنزيل بيانات اليمن من Geofabrik
-      #   تحتوي على: السواحل، الحدود، الطرق، المدن، كل شيء
+      #  4 — تنزيل بيانات اليمن
       # ============================================
       - name: Download Yemen OSM
         run: |
@@ -63,6 +62,8 @@ jobs:
 
       # ============================================
       #  6 — Mapsforge Map Writer 0.25.0
+      #   النسخة apt من osmosis تبحث عن plugins
+      #   في /usr/share/osmosis/lib/ وليس ~/.openstreetmap
       # ============================================
       - name: Download Mapsforge Map Writer
         run: |
@@ -70,10 +71,13 @@ jobs:
             "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
           ls -lh mapsforge-map-writer.jar
 
-      - name: Install Mapsforge plugin
+      - name: Install Mapsforge plugin into osmosis
         run: |
-          mkdir -p ~/.openstreetmap/osmosis/plugins
-          cp mapsforge-map-writer.jar ~/.openstreetmap/osmosis/plugins/
+          # نسخة apt من osmosis تستخدم /usr/share/osmosis/lib/
+          sudo cp mapsforge-map-writer.jar /usr/share/osmosis/lib/
+
+          # التحقق أن osmosis يجد الـ plugin
+          osmosis --map-writer 2>&1 | head -5 || true
 
       # ============================================
       #  7 — إنشاء AlHaswa.map
