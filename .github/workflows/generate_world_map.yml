@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -26,7 +25,6 @@ jobs:
           set -euo pipefail
 
           sudo apt-get update
-
           sudo apt-get install -y \
             wget \
             unzip \
@@ -44,12 +42,7 @@ jobs:
 
           test -s osmosis.zip
 
-          rm -rf osmosis
-
           unzip -q osmosis.zip -d osmosis
-
-          echo "Osmosis files:"
-          find osmosis -maxdepth 4 -type f | head -100
 
       - name: Download Mapsforge Map Writer
         run: |
@@ -63,20 +56,18 @@ jobs:
 
           test -s writer/mapsforge-map-writer.jar
 
-          ls -lh writer/mapsforge-map-writer.jar
-
       - name: Install Mapsforge plugin
         run: |
           set -euo pipefail
 
           mkdir -p "$HOME/.openstreetmap/osmosis/plugins"
+          mkdir -p osmosis/bin/plugins
 
           cp writer/mapsforge-map-writer.jar \
             "$HOME/.openstreetmap/osmosis/plugins/"
 
-          echo "Mapsforge plugin installed."
-
-          ls -lh "$HOME/.openstreetmap/osmosis/plugins/"
+          cp writer/mapsforge-map-writer.jar \
+            osmosis/bin/plugins/
 
       - name: Download Natural Earth data
         run: |
@@ -102,22 +93,11 @@ jobs:
           test -s data/ne/countries.zip
           test -s data/ne/cities.zip
 
-          mkdir -p data/ne/land
-          mkdir -p data/ne/countries
-          mkdir -p data/ne/cities
+          unzip -q data/ne/land.zip -d data/ne/land
+          unzip -q data/ne/countries.zip -d data/ne/countries
+          unzip -q data/ne/cities.zip -d data/ne/cities
 
-          unzip -q data/ne/land.zip \
-            -d data/ne/land
-
-          unzip -q data/ne/countries.zip \
-            -d data/ne/countries
-
-          unzip -q data/ne/cities.zip \
-            -d data/ne/cities
-
-          echo "Natural Earth data downloaded."
-
-      - name: Convert Natural Earth to GeoJSON
+      - name: Convert Natural Earth to OSM XML
         run: |
           set -euo pipefail
 
@@ -136,32 +116,14 @@ jobs:
             data/world/cities.geojson \
             data/ne/cities/ne_110m_populated_places.shp
 
-          test -s data/world/land.geojson
-          test -s data/world/countries.geojson
-          test -s data/world/cities.geojson
-
-          ls -lh data/world/*.geojson
-
-      - name: Convert GeoJSON to OSM XML
-        run: |
-          set -euo pipefail
-
           python3 <<'PY'
           import json
           import math
-          import html
+          import sys
 
-          land = json.load(
-              open("data/world/land.geojson", encoding="utf-8")
-          )
-
-          countries = json.load(
-              open("data/world/countries.geojson", encoding="utf-8")
-          )
-
-          cities = json.load(
-              open("data/world/cities.geojson", encoding="utf-8")
-          )
+          land = json.load(open("data/world/land.geojson", encoding="utf-8"))
+          countries = json.load(open("data/world/countries.geojson", encoding="utf-8"))
+          cities = json.load(open("data/world/cities.geojson", encoding="utf-8"))
 
           node_id = 1
           way_id = -1
@@ -169,474 +131,165 @@ jobs:
           nodes = []
           ways = []
 
-          def clean(value):
-              if value is None:
-                  return ""
-
-              return html.escape(
-                  str(value),
-                  quote=True
-              )
-
           def add_node(lon, lat, tags=None):
               global node_id
-
-              try:
-                  lon = float(lon)
-                  lat = float(lat)
-              except Exception:
+              if not math.isfinite(lon) or not math.isfinite(lat):
                   return None
-
-              if not math.isfinite(lon):
-                  return None
-
-              if not math.isfinite(lat):
-                  return None
-
-              if lon < -180 or lon > 180:
-                  return None
-
-              if lat < -90 or lat > 90:
-                  return None
-
               nid = node_id
-
               node_id += 1
-
-              nodes.append(
-                  (
-                      nid,
-                      lat,
-                      lon,
-                      tags or {}
-                  )
-              )
-
+              nodes.append((nid, lat, lon, tags or {}))
               return nid
 
           def add_polygon(coords, tags):
               global way_id
-
-              if not coords:
+              if len(coords) < 3:
                   return
-
               refs = []
-
-              for point in coords:
-
-                  if len(point) < 2:
-                      continue
-
-                  lon = point[0]
-                  lat = point[1]
-
-                  nid = add_node(
-                      lon,
-                      lat
-                  )
-
+              for lon, lat in coords:
+                  nid = add_node(lon, lat)
                   if nid is not None:
                       refs.append(nid)
-
               if len(refs) < 3:
                   return
-
               if refs[0] != refs[-1]:
                   refs.append(refs[0])
-
               wid = way_id
-
               way_id -= 1
-
-              ways.append(
-                  (
-                      wid,
-                      refs,
-                      tags
-                  )
-              )
+              ways.append((wid, refs, tags))
 
           def process_geometry(geometry, tags):
-
               if not geometry:
                   return
-
-              gtype = geometry.get("type")
-
-              coordinates = geometry.get(
-                  "coordinates"
-              )
-
-              if not coordinates:
-                  return
-
+              gtype = geometry["type"]
+              coordinates = geometry["coordinates"]
               if gtype == "Polygon":
-
                   for ring in coordinates:
-                      add_polygon(
-                          ring,
-                          tags
-                      )
-
+                      add_polygon(ring, tags)
               elif gtype == "MultiPolygon":
-
                   for polygon in coordinates:
-
                       for ring in polygon:
-                          add_polygon(
-                              ring,
-                              tags
-                          )
+                          add_polygon(ring, tags)
 
-          # ==========================================
-          # LAND
-          # ==========================================
+          # ===== اليابسة (land) =====
+          for feature in land["features"]:
+              process_geometry(feature["geometry"], {"natural": "nosea"})
 
-          for feature in land.get(
-              "features",
-              []
-          ):
+          # ===== البحر (sea) — مضلع يغطي العالم كله =====
+          sea_refs = []
+          # حدود العالم: -180,-90 → 180,-90 → 180,90 → -180,90 → إغلاق
+          for lon, lat in [
+              (-180, -90), (180, -90), (180, 90), (-180, 90), (-180, -90)
+          ]:
+              nid = add_node(lon, lat)
+              if nid is not None:
+                  sea_refs.append(nid)
+          ways.append((way_id, sea_refs, {"natural": "sea"}))
+          way_id -= 1
 
-              process_geometry(
-                  feature.get("geometry"),
-                  {
-                      "natural": "nosea"
-                  }
-              )
-
-          # ==========================================
-          # COUNTRIES + BORDERS + COUNTRY LABELS
-          # ==========================================
-
-          for feature in countries.get(
-              "features",
-              []
-          ):
-
-              properties = feature.get(
-                  "properties",
-                  {}
-              )
-
-              name = (
-                  properties.get("NAME")
-                  or properties.get("ADMIN")
-                  or properties.get("NAME_EN")
-                  or ""
-              )
-
+          # ===== حدود الدول =====
+          for feature in countries["features"]:
+              props = feature.get("properties", {})
+              name = props.get("NAME", props.get("name", ""))
               tags = {
                   "boundary": "administrative",
                   "admin_level": "2"
               }
-
               if name:
                   tags["name"] = name
+              process_geometry(feature["geometry"], tags)
 
-              process_geometry(
-                  feature.get("geometry"),
-                  tags
-              )
+          # ===== المدن الكبرى =====
+          for feature in cities["features"]:
+              props = feature.get("properties", {})
+              name = props.get("NAME", props.get("name", ""))
+              pop = props.get("POP_RANK", 0)
+              geom = feature["geometry"]
+              if geom["type"] == "Point":
+                  lon, lat = geom["coordinates"]
+                  tags = {"place": "city"}
+                  if name:
+                      tags["name"] = name
+                  if pop and int(pop) <= 4:
+                      tags["population"] = str(10 ** (9 - int(pop)))
+                  add_node(lon, lat, tags)
 
-              lon = properties.get(
-                  "LABEL_X"
-              )
+          # ===== كتابة ملف OSM XML =====
+          out = open("data/world/world.osm", "w", encoding="utf-8")
+          out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+          out.write('<osm version="0.6" generator="natural-earth-to-osm">\n')
+          # ===== إضافة bounds — ضروري لـ Mapsforge Map Writer =====
+          out.write('  <bounds minlat="-90.0" minlon="-180.0" maxlat="90.0" maxlon="180.0"/>\n')
 
-              lat = properties.get(
-                  "LABEL_Y"
-              )
+          for nid, lat, lon, tags in nodes:
+              out.write(f'  <node id="{nid}" lat="{lat:.7f}" lon="{lon:.7f}" visible="true">\n')
+              for k, v in tags.items():
+                  out.write(f'    <tag k="{k}" v="{v}"/>\n')
+              out.write('  </node>\n')
 
-              if lon is not None and lat is not None:
+          for wid, refs, tags in ways:
+              out.write(f'  <way id="{wid}" visible="true">\n')
+              for ref in refs:
+                  out.write(f'    <nd ref="{ref}"/>\n')
+              for k, v in tags.items():
+                  out.write(f'    <tag k="{k}" v="{v}"/>\n')
+              out.write('  </way>\n')
 
-                  add_node(
-                      lon,
-                      lat,
-                      {
-                          "place": "country",
-                          "name": name
-                      }
-                  )
+          out.write('</osm>\n')
+          out.close()
 
-          # ==========================================
-          # CITIES
-          # ==========================================
-
-          for feature in cities.get(
-              "features",
-              []
-          ):
-
-              properties = feature.get(
-                  "properties",
-                  {}
-              )
-
-              name = (
-                  properties.get("NAME")
-                  or properties.get("NAMEASCII")
-                  or ""
-              )
-
-              geometry = feature.get(
-                  "geometry"
-              )
-
-              if not geometry:
-                  continue
-
-              if geometry.get(
-                  "type"
-              ) != "Point":
-                  continue
-
-              coordinates = geometry.get(
-                  "coordinates"
-              )
-
-              if not coordinates:
-                  continue
-
-              lon = coordinates[0]
-              lat = coordinates[1]
-
-              add_node(
-                  lon,
-                  lat,
-                  {
-                      "place": "city",
-                      "name": name
-                  }
-              )
-
-          # ==========================================
-          # WRITE OSM XML
-          # ==========================================
-
-          with open(
-              "data/world/world.osm",
-              "w",
-              encoding="utf-8"
-          ) as out:
-
-              out.write(
-                  '<?xml version="1.0" encoding="UTF-8"?>\n'
-              )
-
-              out.write(
-                  '<osm version="0.6" generator="AlHaswa">\n'
-              )
-
-              # Nodes
-
-              for nid, lat, lon, tags in nodes:
-
-                  out.write(
-                      f'  <node id="{nid}" '
-                      f'lat="{lat:.7f}" '
-                      f'lon="{lon:.7f}">\n'
-                  )
-
-                  for key, value in tags.items():
-
-                      if value == "":
-                          continue
-
-                      out.write(
-                          f'    <tag '
-                          f'k="{clean(key)}" '
-                          f'v="{clean(value)}"/>\n'
-                      )
-
-                  out.write(
-                      '  </node>\n'
-                  )
-
-              # Ways
-
-              for wid, refs, tags in ways:
-
-                  out.write(
-                      f'  <way id="{wid}">\n'
-                  )
-
-                  for ref in refs:
-
-                      out.write(
-                          f'    <nd ref="{ref}"/>\n'
-                      )
-
-                  for key, value in tags.items():
-
-                      if value == "":
-                          continue
-
-                      out.write(
-                          f'    <tag '
-                          f'k="{clean(key)}" '
-                          f'v="{clean(value)}"/>\n'
-                      )
-
-                  out.write(
-                      '  </way>\n'
-                  )
-
-              out.write(
-                  '</osm>\n'
-              )
-
-          print()
-          print(
-              "================================"
-          )
-          print(
-              "World OSM generation completed"
-          )
-          print(
-              "Nodes:",
-              len(nodes)
-          )
-          print(
-              "Ways :",
-              len(ways)
-          )
-          print(
-              "================================"
-          )
-
+          print(f"Nodes: {len(nodes)}, Ways: {len(ways)}")
+          print("Done writing world.osm")
           PY
-
-          test -s data/world/world.osm
-
-          ls -lh data/world/world.osm
 
       - name: Convert OSM XML to PBF
         run: |
           set -euo pipefail
 
-          osmium cat \
-            data/world/world.osm \
-            -o data/world/world-unsorted.osm.pbf \
-            --overwrite
+          osmium cat data/world/world.osm \
+            -o data/world/world.osm.pbf
 
-          test -s data/world/world-unsorted.osm.pbf
-
-          ls -lh data/world/world-unsorted.osm.pbf
-
-      - name: Sort PBF
-        run: |
-          set -euo pipefail
-
-          osmium sort \
-            data/world/world-unsorted.osm.pbf \
-            -o data/world/world.osm.pbf \
-            --overwrite
-
-          test -s data/world/world.osm.pbf
-
-          echo "Sorted world PBF:"
+          # تأكد من وجود bbox في الترويسة
+          osmium fileinfo data/world/world.osm.pbf
 
           ls -lh data/world/world.osm.pbf
 
-          echo "PBF information:"
-
-          osmium fileinfo \
-            data/world/world.osm.pbf
-
-      - name: Find Osmosis
+      - name: Remove maritime boundaries (safety filter)
         run: |
           set -euo pipefail
 
-          echo "Searching for Osmosis executable..."
+          # Natural Earth لا يحتوي maritime لكن نفلتر احتياطياً
+          # نستخدم osmium sort لضمان ترتيب صحيح + إعادة حساب bbox
+          osmium tags-filter data/world/world.osm.pbf \
+            'r/boundary=maritime' 'r/maritime=yes' \
+            --invert-match \
+            -o data/world/world-filtered.osm.pbf
 
-          OSMOSIS_BIN=$(
-            find osmosis \
-              -type f \
-              -name "osmosis" \
-              | head -n 1
-          )
+          # إعادة ترتيب + حساب bbox تلقائي من البيانات
+          osmium sort data/world/world-filtered.osm.pbf \
+            -o data/world/world-clean.osm.pbf
 
-          if [ -z "$OSMOSIS_BIN" ]; then
+          # تأكد من وجود bbox بعد التصفية
+          osmium fileinfo data/world/world-clean.osm.pbf
 
-            echo "ERROR: Osmosis executable not found."
+          ls -lh data/world/world-clean.osm.pbf
 
-            echo ""
-
-            echo "Files inside osmosis:"
-
-            find osmosis \
-              -maxdepth 5 \
-              -type f \
-              | head -200
-
-            exit 1
-
-          fi
-
-          echo "Osmosis found at:"
-
-          echo "$OSMOSIS_BIN"
-
-          chmod +x "$OSMOSIS_BIN"
-
-          echo \
-            "OSMOSIS_BIN=$OSMOSIS_BIN" \
-            >> "$GITHUB_ENV"
-
-      - name: Install plugin beside Osmosis
+      - name: Generate world.map with Mapsforge
         run: |
           set -euo pipefail
 
-          OSMOSIS_DIR=$(
-            dirname "$OSMOSIS_BIN"
-          )
+          chmod +x osmosis/bin/osmosis
 
-          mkdir -p \
-            "$OSMOSIS_DIR/plugins"
-
-          cp \
-            writer/mapsforge-map-writer.jar \
-            "$OSMOSIS_DIR/plugins/"
-
-          echo "Plugin installed at:"
-
-          ls -lh \
-            "$OSMOSIS_DIR/plugins/"
-
-      - name: Generate world.map
-        run: |
-          set -euo pipefail
-
-          echo "Starting Mapsforge map generation..."
-
-          echo "Using Osmosis:"
-
-          echo "$OSMOSIS_BIN"
-
-          rm -f \
-            app/src/main/assets/world.map
-
-          "$OSMOSIS_BIN" \
-            --read-pbf \
-            file=data/world/world.osm.pbf \
+          osmosis/bin/osmosis \
+            --read-pbf file=data/world/world-clean.osm.pbf \
             --mapfile-writer \
             file=app/src/main/assets/world.map \
             type=ram \
+            zoom-interval=0,0,7 \
+            bbox=-90.0,-180.0,90.0,180.0 \
             map-start-position=15.0,48.0 \
             map-start-zoom=2
 
-          test -s \
-            app/src/main/assets/world.map
-
-          echo ""
-
-          echo "================================"
-
-          echo "world.map generated successfully"
-
-          echo "================================"
-
-          ls -lh \
-            app/src/main/assets/world.map
+          ls -lh app/src/main/assets/world.map
 
       - name: Verify world.map
         run: |
@@ -645,65 +298,29 @@ jobs:
           FILE="app/src/main/assets/world.map"
 
           if [ ! -f "$FILE" ]; then
-
-            echo "ERROR: world.map does not exist."
-
+            echo "ERROR: world.map not found!"
             exit 1
-
           fi
 
-          SIZE=$(
-            stat -c%s "$FILE"
-          )
-
-          echo "world.map size:"
-
-          echo "$SIZE bytes"
+          SIZE=$(stat -c%s "$FILE")
+          echo "world.map size: $SIZE bytes"
 
           if [ "$SIZE" -lt 51200 ]; then
-
-            echo \
-              "ERROR: world.map is smaller than 50 KB."
-
+            echo "ERROR: world.map is too small ($SIZE < 50KB), likely corrupt"
             exit 1
-
           fi
 
-          echo ""
-
-          echo "world.map verification passed."
+          echo "world.map looks good!"
 
       - name: Commit world.map
         run: |
           set -euo pipefail
 
-          git config \
-            user.name \
-            "github-actions[bot]"
+          FILE="app/src/main/assets/world.map"
 
-          git config \
-            user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add \
-            app/src/main/assets/world.map
-
-          if git diff --cached --quiet; then
-
-            echo "world.map has no changes."
-
-          else
-
-            git commit \
-              -m "Add world Mapsforge map"
-
-            git push
-
-          fi
-
-      - name: Upload world.map artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: world-map
-          path: app/src/main/assets/world.map
-          if-no-files-found: error
+          git add "$FILE"
+          git commit -m "🌍 Add world.map (Natural Earth 110m, zoom 0-7)" || true
+          git push
