@@ -11,20 +11,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      # ============================================
+      # 1 — Checkout
+      # ============================================
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      # ============================================
+      # 2 — Java 21
+      # ============================================
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
+      # ============================================
+      # 3 — Install tools
+      # ============================================
       - name: Install tools
         run: |
           set -euo pipefail
 
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y \
             wget \
             unzip \
@@ -32,53 +41,66 @@ jobs:
             gdal-bin \
             python3
 
-      - name: Download Osmosis
-        run: |
-          set -euo pipefail
+          # --- Osmosis ---
+          wget -O osmosis.zip \
+            "https://github.com/openstreetmap/osmosis/releases/download/0.49.2/osmosis-0.49.2.zip"
 
-          wget -q --show-progress \
-            https://github.com/openstreetmap/osmosis/releases/download/0.49.2/osmosis-0.49.2.zip \
-            -O osmosis.zip
+          unzip -q osmosis.zip
+          mv osmosis-0.49.2 osmosis
+          chmod +x osmosis/bin/osmosis
 
-          test -s osmosis.zip
+          echo "=== Osmosis version ==="
+          ./osmosis/bin/osmosis --version || true
 
-          # فك الضغط — الهيكل يُنتج مجلد osmosis-0.49.2/bin/osmosis
-          unzip -q osmosis.zip -d osmosis-dir
+          echo "=== Osmium version ==="
+          osmium --version
 
-          # أعِد التسمية لسهولة الاستخدام
-          mv osmosis-dir/osmosis-0.49.2 osmosis
-
-          # تأكد أن السكربت موجود
-          ls -la osmosis/bin/osmosis
-          test -x osmosis/bin/osmosis || true
-
+      # ============================================
+      # 4 — Download Mapsforge Map Writer
+      # ============================================
       - name: Download Mapsforge Map Writer
         run: |
-          set -euo pipefail
+          wget -O mapsforge-map-writer.jar \
+            "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
 
-          mkdir -p writer
+          echo "=== Mapsforge Writer ==="
+          ls -lh mapsforge-map-writer.jar
 
-          wget -q --show-progress \
-            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
-            -O writer/mapsforge-map-writer.jar
+          echo "=== Checking plugin.xml ==="
+          unzip -l mapsforge-map-writer.jar | grep -i "plugin.xml" || true
 
-          test -s writer/mapsforge-map-writer.jar
-
+      # ============================================
+      # 5 — Install Mapsforge plugin
+      # ============================================
       - name: Install Mapsforge plugin
         run: |
           set -euo pipefail
 
-          # إنشاء مجلد plugins داخل Osmosis
-          mkdir -p "$HOME/.openstreetmap/osmosis/plugins"
-          mkdir -p osmosis/lib/plugins
+          mkdir -p ~/.openstreetmap/osmosis/plugins
           mkdir -p osmosis/bin/plugins
 
-          # نسخ الـ plugin — نضعه في كل المجلدات المحتملة
-          cp writer/mapsforge-map-writer.jar \
-            "$HOME/.openstreetmap/osmosis/plugins/"
-          cp writer/mapsforge-map-writer.jar osmosis/lib/plugins/
-          cp writer/mapsforge-map-writer.jar osmosis/bin/plugins/
+          cp mapsforge-map-writer.jar \
+            ~/.openstreetmap/osmosis/plugins/
+          cp mapsforge-map-writer.jar \
+            osmosis/bin/plugins/
 
+          echo "=== User plugin directory ==="
+          ls -lh ~/.openstreetmap/osmosis/plugins/
+
+          echo "=== Osmosis plugin directory ==="
+          ls -lh osmosis/bin/plugins/
+
+      # ============================================
+      # 6 — Test Mapsforge task
+      # ============================================
+      - name: Test Mapsforge task
+        run: |
+          ./osmosis/bin/osmosis \
+            --help | grep -i "mapfile-writer" || true
+
+      # ============================================
+      # 7 — Download Natural Earth data
+      # ============================================
       - name: Download Natural Earth data
         run: |
           set -euo pipefail
@@ -87,17 +109,14 @@ jobs:
           mkdir -p data/world
           mkdir -p app/src/main/assets
 
-          wget -q --show-progress \
-            https://naturalearth.s3.amazonaws.com/110m_physical/ne_110m_land.zip \
-            -O data/ne/land.zip
+          wget -O data/ne/land.zip \
+            "https://naturalearth.s3.amazonaws.com/110m_physical/ne_110m_land.zip"
 
-          wget -q --show-progress \
-            https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip \
-            -O data/ne/countries.zip
+          wget -O data/ne/countries.zip \
+            "https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip"
 
-          wget -q --show-progress \
-            https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_populated_places.zip \
-            -O data/ne/cities.zip
+          wget -O data/ne/cities.zip \
+            "https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_populated_places.zip"
 
           test -s data/ne/land.zip
           test -s data/ne/countries.zip
@@ -107,6 +126,9 @@ jobs:
           unzip -q data/ne/countries.zip -d data/ne/countries
           unzip -q data/ne/cities.zip -d data/ne/cities
 
+      # ============================================
+      # 8 — Convert Natural Earth to OSM XML
+      # ============================================
       - name: Convert Natural Earth to OSM XML
         run: |
           set -euo pipefail
@@ -186,7 +208,6 @@ jobs:
 
           # ===== البحر (sea) — مضلع يغطي العالم كله =====
           sea_refs = []
-          # حدود العالم: -180,-90 → 180,-90 → 180,90 → -180,90 → إغلاق
           for lon, lat in [
               (-180, -90), (180, -90), (180, 90), (-180, 90), (-180, -90)
           ]:
@@ -212,15 +233,12 @@ jobs:
           for feature in cities["features"]:
               props = feature.get("properties", {})
               name = props.get("NAME", props.get("name", ""))
-              pop = props.get("POP_RANK", 0)
               geom = feature["geometry"]
               if geom["type"] == "Point":
                   lon, lat = geom["coordinates"]
                   tags = {"place": "city"}
                   if name:
                       tags["name"] = name
-                  if pop and int(pop) <= 4:
-                      tags["population"] = str(10 ** (9 - int(pop)))
                   add_node(lon, lat, tags)
 
           # ===== كتابة ملف OSM XML =====
@@ -251,6 +269,9 @@ jobs:
           print("Done writing world.osm")
           PY
 
+      # ============================================
+      # 9 — Convert OSM XML to PBF
+      # ============================================
       - name: Convert OSM XML to PBF
         run: |
           set -euo pipefail
@@ -258,81 +279,101 @@ jobs:
           osmium cat data/world/world.osm \
             -o data/world/world.osm.pbf
 
-          # تأكد من وجود bbox في الترويسة
+          echo "=== PBF file info ==="
           osmium fileinfo data/world/world.osm.pbf
 
           ls -lh data/world/world.osm.pbf
 
-      - name: Remove maritime boundaries (safety filter)
+      # ============================================
+      # 10 — Remove maritime boundaries (safety)
+      # ============================================
+      - name: Remove maritime boundaries
         run: |
           set -euo pipefail
 
           # Natural Earth لا يحتوي maritime لكن نفلتر احتياطياً
-          # نستخدم osmium sort لضمان ترتيب صحيح + إعادة حساب bbox
-          osmium tags-filter data/world/world.osm.pbf \
+          osmium tags-filter \
+            data/world/world.osm.pbf \
             'r/boundary=maritime' 'r/maritime=yes' \
             --invert-match \
-            -o data/world/world-filtered.osm.pbf
+            -o data/world/world-filtered.osm.pbf \
+            --overwrite
 
-          # إعادة ترتيب + حساب bbox تلقائي من البيانات
-          osmium sort data/world/world-filtered.osm.pbf \
-            -o data/world/world-clean.osm.pbf
+          # إعادة ترتيب + حساب bbox تلقائي
+          osmium sort \
+            data/world/world-filtered.osm.pbf \
+            -o data/world/world-clean.osm.pbf \
+            --overwrite
 
-          # تأكد من وجود bbox بعد التصفية
+          echo "=== Clean PBF file info ==="
           osmium fileinfo data/world/world-clean.osm.pbf
 
           ls -lh data/world/world-clean.osm.pbf
 
-      - name: Generate world.map with Mapsforge
+      # ============================================
+      # 11 — Generate world.map
+      # ============================================
+      - name: Generate world.map
         run: |
           set -euo pipefail
 
-          # تأكد أن سكربت Osmosis قابل للتنفيذ
-          chmod +x osmosis/bin/osmosis
+          mkdir -p app/src/main/assets
 
-          # شغّل Osmosis
-          osmosis/bin/osmosis \
+          ./osmosis/bin/osmosis \
             --read-pbf file=data/world/world-clean.osm.pbf \
             --mapfile-writer \
             file=app/src/main/assets/world.map \
             type=ram \
-            zoom-interval=0,0,7 \
+            zoom-interval-conf=5,0,7 \
             bbox=-90.0,-180.0,90.0,180.0 \
             map-start-position=15.0,48.0 \
             map-start-zoom=2
 
+          echo "=== Generated map ==="
           ls -lh app/src/main/assets/world.map
 
-      - name: Verify world.map
+      # ============================================
+      # 12 — Verify map
+      # ============================================
+      - name: Verify map
         run: |
           set -euo pipefail
 
           FILE="app/src/main/assets/world.map"
 
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: world.map not found!"
+          if [ ! -s "$FILE" ]; then
+            echo "ERROR: world.map is missing or empty!"
             exit 1
           fi
 
           SIZE=$(stat -c%s "$FILE")
-          echo "world.map size: $SIZE bytes"
 
           if [ "$SIZE" -lt 51200 ]; then
-            echo "ERROR: world.map is too small ($SIZE < 50KB), likely corrupt"
+            echo "ERROR: world.map is only $SIZE bytes!"
             exit 1
           fi
 
-          echo "world.map looks good!"
+          echo "======================================"
+          echo "✅ world.map created successfully"
+          echo "Size: $(ls -lh "$FILE" | awk '{print $5}')"
+          echo "Bytes: $SIZE"
+          echo "======================================"
 
-      - name: Commit world.map
+      # ============================================
+      # 13 — Commit map
+      # ============================================
+      - name: Commit map
         run: |
           set -euo pipefail
 
-          FILE="app/src/main/assets/world.map"
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/world.map
 
-          git add "$FILE"
-          git commit -m "🌍 Add world.map (Natural Earth 110m, zoom 0-7)" || true
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: generate world Mapsforge map [skip ci]"
+            git push
+          fi
