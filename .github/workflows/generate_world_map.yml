@@ -58,24 +58,14 @@ jobs:
           osmium --version
 
       # ============================================
-      # 4 — Download Mapsforge Map Writer
+      # 4 — Download Mapsforge Map Writer + Install
       # ============================================
-      - name: Download Mapsforge Map Writer
+      - name: Download and install Mapsforge Map Writer
         run: |
           set -euo pipefail
 
           wget -O mapsforge-map-writer.jar \
             "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
-
-          echo "=== Mapsforge Writer ==="
-          ls -lh mapsforge-map-writer.jar
-
-      # ============================================
-      # 5 — Install Mapsforge plugin
-      # ============================================
-      - name: Install Mapsforge plugin
-        run: |
-          set -euo pipefail
 
           mkdir -p ~/.openstreetmap/osmosis/plugins
           mkdir -p osmosis/lib/plugins
@@ -85,19 +75,13 @@ jobs:
           cp mapsforge-map-writer.jar osmosis/lib/plugins/
           cp mapsforge-map-writer.jar osmosis/bin/plugins/
 
-          echo "=== Plugin directories ==="
+          echo "=== Plugin installed ==="
           ls -lh ~/.openstreetmap/osmosis/plugins/
 
-      # ============================================
-      # 6 — Test Mapsforge task
-      # ============================================
-      - name: Test Mapsforge task
-        run: |
-          ./osmosis/bin/osmosis \
-            --help | grep -i "mapfile-writer" || true
+          ./osmosis/bin/osmosis --help | grep -i "mapfile-writer" || true
 
       # ============================================
-      # 7 — Download land polygons from OSM Data
+      # 5 — Download land polygons from OSM Data
       # ============================================
       - name: Download land polygons
         run: |
@@ -105,7 +89,7 @@ jobs:
 
           mkdir -p data
 
-          echo "Downloading land polygons (this may take a few minutes)..."
+          echo "Downloading land polygons..."
           wget -O data/land-polygons-split-4326.zip \
             "https://osmdata.openstreetmap.de/download/land-polygons-split-4326.zip"
 
@@ -116,7 +100,7 @@ jobs:
           ls -lh data/land-polygons-split-4326/land_polygons.shp
 
       # ============================================
-      # 8 — Convert land polygons to OSM XML using GDAL
+      # 6 — Convert land shapefile to OSM XML
       # ============================================
       - name: Convert land polygons to OSM XML
         run: |
@@ -124,9 +108,7 @@ jobs:
 
           mkdir -p data/world
 
-          # استخدام ogr2ogr لتحويل مباشر إلى OSM XML
-          # لكن ogr2ogr لا يدعم OSM XML مباشرة
-          # لذلك نحول إلى GeoJSON أولاً ثم بـ Python
+          # ogr2ogr يحول Shapefile إلى GeoJSON
           ogr2ogr \
             -f GeoJSON \
             -lco COORDINATE_PRECISION=2 \
@@ -136,8 +118,94 @@ jobs:
           echo "=== land.geojson ==="
           ls -lh data/world/land.geojson
 
+          # تحويل GeoJSON إلى OSM XML بـ Python
+          # كل ميزة تصبح way بـ tag natural=nosea
+          python3 << 'PY'
+          import json
+          import math
+
+          node_id = 500000001
+          way_id = -500000001
+
+          with open("data/world/land.geojson", encoding="utf-8") as f:
+              land = json.load(f)
+
+          out = open("data/world/land.osm", "w", encoding="utf-8")
+          out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+          out.write('<osm version="0.6" generator="land-to-osm">\n')
+          out.write('  <bounds minlat="-90.0" minlon="-180.0" maxlat="90.0" maxlon="180.0"/>\n')
+
+          def add_ring(coords, tags):
+              """إضافة حلقة واحدة (ring) كـ way"""
+              global node_id, way_id
+              if not coords or len(coords) < 3:
+                  return
+              refs = []
+              for point in coords:
+                  # coords قد تكون [lon, lat] أو [lon, lat, z]
+                  if not isinstance(point, (list, tuple)) or len(point) < 2:
+                      continue
+                  lon, lat = point[0], point[1]
+                  if math.isfinite(lon) and math.isfinite(lat) and abs(lon) <= 180 and abs(lat) <= 90:
+                      out.write(f'  <node id="{node_id}" lat="{lat:.7f}" lon="{lon:.7f}"/>\n')
+                      refs.append(node_id)
+                      node_id += 1
+              if len(refs) < 3:
+                  return
+              if refs[0] != refs[-1]:
+                  refs.append(refs[0])
+              out.write(f'  <way id="{way_id}">\n')
+              for ref in refs:
+                  out.write(f'    <nd ref="{ref}"/>\n')
+              for k, v in tags.items():
+                  out.write(f'    <tag k="{k}" v="{v}"/>\n')
+              out.write('  </way>\n')
+              way_id -= 1
+
+          def process_geometry(geom, tags):
+              """معالجة أي نوع هندسة بأمان"""
+              if not geom or not isinstance(geom, dict):
+                  return
+              gtype = geom.get("type", "")
+              coords = geom.get("coordinates")
+              if coords is None:
+                  return
+              try:
+                  if gtype == "Polygon":
+                      for ring in coords:
+                          if isinstance(ring, list) and len(ring) > 0:
+                              add_ring(ring, tags)
+                  elif gtype == "MultiPolygon":
+                      for polygon in coords:
+                          if isinstance(polygon, list):
+                              for ring in polygon:
+                                  if isinstance(ring, list) and len(ring) > 0:
+                                      add_ring(ring, tags)
+                  elif gtype == "GeometryCollection":
+                      for sub_geom in geom.get("geometries", []):
+                          process_geometry(sub_geom, tags)
+              except Exception as e:
+                  print(f"  Warning: skipping geometry ({gtype}): {e}")
+
+          count = 0
+          for feature in land.get("features", []):
+              geom = feature.get("geometry")
+              if geom:
+                  process_geometry(geom, {"natural": "nosea"})
+                  count += 1
+              if count % 1000 == 0 and count > 0:
+                  print(f"  Processed {count} land features...")
+
+          out.write('</osm>\n')
+          out.close()
+          print(f"Done: land.osm ({count} features)")
+          PY
+
+          echo "=== land.osm ==="
+          ls -lh data/world/land.osm
+
       # ============================================
-      # 9 — Create sea.osm
+      # 7 — Create sea.osm
       # ============================================
       - name: Create sea polygon
         run: |
@@ -164,7 +232,7 @@ jobs:
           ls -lh data/world/sea.osm
 
       # ============================================
-      # 10 — Download Natural Earth boundaries and cities
+      # 8 — Download Natural Earth boundaries and cities
       # ============================================
       - name: Download Natural Earth data
         run: |
@@ -182,7 +250,7 @@ jobs:
           unzip -q data/ne/cities.zip -d data/ne/cities
 
       # ============================================
-      # 11 — Convert boundaries and cities to OSM XML
+      # 9 — Convert boundaries and cities to OSM XML
       # ============================================
       - name: Convert boundaries and cities to OSM
         run: |
@@ -198,20 +266,27 @@ jobs:
           node_id = 100000001
           way_id = -100000001
 
-          countries = json.load(open("data/ne/countries.geojson", encoding="utf-8"))
-          cities = json.load(open("data/ne/cities.geojson", encoding="utf-8"))
+          with open("data/ne/countries.geojson", encoding="utf-8") as f:
+              countries = json.load(f)
+
+          with open("data/ne/cities.geojson", encoding="utf-8") as f:
+              cities = json.load(f)
 
           out = open("data/world/boundaries.osm", "w", encoding="utf-8")
           out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
           out.write('<osm version="0.6" generator="ne-to-osm">\n')
           out.write('  <bounds minlat="-90.0" minlon="-180.0" maxlat="90.0" maxlon="180.0"/>\n')
 
-          def add_polygon(coords, tags):
+          def add_ring(coords, tags):
+              """إضافة حلقة واحدة (ring) كـ way"""
               global node_id, way_id
-              if len(coords) < 3:
+              if not coords or len(coords) < 3:
                   return
               refs = []
-              for lon, lat in coords:
+              for point in coords:
+                  if not isinstance(point, (list, tuple)) or len(point) < 2:
+                      continue
+                  lon, lat = point[0], point[1]
                   if math.isfinite(lon) and math.isfinite(lat) and abs(lon) <= 180 and abs(lat) <= 90:
                       out.write(f'  <node id="{node_id}" lat="{lat:.7f}" lon="{lon:.7f}"/>\n')
                       refs.append(node_id)
@@ -228,42 +303,62 @@ jobs:
               out.write('  </way>\n')
               way_id -= 1
 
-          def process_geometry(geometry, tags):
-              if not geometry:
+          def process_geometry(geom, tags):
+              """معالجة أي نوع هندسة بأمان"""
+              if not geom or not isinstance(geom, dict):
                   return
-              gtype = geometry["type"]
-              coordinates = geometry["coordinates"]
-              if gtype == "Polygon":
-                  for ring in coordinates:
-                      add_polygon(ring, tags)
-              elif gtype == "MultiPolygon":
-                  for polygon in coordinates:
-                      for ring in polygon:
-                          add_polygon(ring, tags)
+              gtype = geom.get("type", "")
+              coords = geom.get("coordinates")
+              if coords is None:
+                  return
+              try:
+                  if gtype == "Polygon":
+                      for ring in coords:
+                          if isinstance(ring, list) and len(ring) > 0:
+                              add_ring(ring, tags)
+                  elif gtype == "MultiPolygon":
+                      for polygon in coords:
+                          if isinstance(polygon, list):
+                              for ring in polygon:
+                                  if isinstance(ring, list) and len(ring) > 0:
+                                      add_ring(ring, tags)
+                  elif gtype == "GeometryCollection":
+                      for sub_geom in geom.get("geometries", []):
+                          process_geometry(sub_geom, tags)
+              except Exception as e:
+                  print(f"  Warning: skipping geometry ({gtype}): {e}")
 
-          for feature in countries["features"]:
+          # === حدود الدول ===
+          for feature in countries.get("features", []):
               props = feature.get("properties", {})
               name = props.get("NAME", props.get("name", ""))
               tags = {"boundary": "administrative", "admin_level": "2"}
               if name:
                   tags["name"] = name
-              process_geometry(feature["geometry"], tags)
+              geom = feature.get("geometry")
+              if geom:
+                  process_geometry(geom, tags)
 
-          for feature in cities["features"]:
+          # === المدن الكبرى ===
+          for feature in cities.get("features", []):
               props = feature.get("properties", {})
               name = props.get("NAME", props.get("name", ""))
-              geom = feature["geometry"]
-              if geom["type"] == "Point":
-                  lon, lat = geom["coordinates"]
-                  if math.isfinite(lon) and math.isfinite(lat):
-                      tags = {"place": "city"}
-                      if name:
-                          tags["name"] = name
-                      out.write(f'  <node id="{node_id}" lat="{lat:.7f}" lon="{lon:.7f}">\n')
-                      for k, v in tags.items():
-                          out.write(f'    <tag k="{k}" v="{v}"/>\n')
-                      out.write('  </node>\n')
-                      node_id += 1
+              geom = feature.get("geometry")
+              if not geom or not isinstance(geom, dict):
+                  continue
+              if geom.get("type") == "Point":
+                  coords = geom.get("coordinates")
+                  if coords and len(coords) >= 2:
+                      lon, lat = coords[0], coords[1]
+                      if math.isfinite(lon) and math.isfinite(lat):
+                          tags = {"place": "city"}
+                          if name:
+                              tags["name"] = name
+                          out.write(f'  <node id="{node_id}" lat="{lat:.7f}" lon="{lon:.7f}">\n')
+                          for k, v in tags.items():
+                              out.write(f'    <tag k="{k}" v="{v}"/>\n')
+                          out.write('  </node>\n')
+                          node_id += 1
 
           out.write('</osm>\n')
           out.close()
@@ -274,84 +369,12 @@ jobs:
           ls -lh data/world/boundaries.osm
 
       # ============================================
-      # 12 — Convert land GeoJSON to OSM XML (nosea)
+      # 10 — Merge all OSM files into one PBF
       # ============================================
-      - name: Convert land to OSM XML with natural=nosea
+      - name: Merge all files into PBF
         run: |
           set -euo pipefail
 
-          python3 << 'PY'
-          import json
-          import math
-
-          node_id = 500000001
-          way_id = -500000001
-
-          land = json.load(open("data/world/land.geojson", encoding="utf-8"))
-
-          out = open("data/world/land.osm", "w", encoding="utf-8")
-          out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-          out.write('<osm version="0.6" generator="land-to-osm">\n')
-          out.write('  <bounds minlat="-90.0" minlon="-180.0" maxlat="90.0" maxlon="180.0"/>\n')
-
-          def add_polygon(coords, tags):
-              global node_id, way_id
-              if len(coords) < 3:
-                  return
-              refs = []
-              for lon, lat in coords:
-                  if math.isfinite(lon) and math.isfinite(lat) and abs(lon) <= 180 and abs(lat) <= 90:
-                      out.write(f'  <node id="{node_id}" lat="{lat:.7f}" lon="{lon:.7f}"/>\n')
-                      refs.append(node_id)
-                      node_id += 1
-              if len(refs) < 3:
-                  return
-              if refs[0] != refs[-1]:
-                  refs.append(refs[0])
-              out.write(f'  <way id="{way_id}">\n')
-              for ref in refs:
-                  out.write(f'    <nd ref="{ref}"/>\n')
-              for k, v in tags.items():
-                  out.write(f'    <tag k="{k}" v="{v}"/>\n')
-              out.write('  </way>\n')
-              way_id -= 1
-
-          def process_geometry(geometry, tags):
-              if not geometry:
-                  return
-              gtype = geometry["type"]
-              coordinates = geometry["coordinates"]
-              if gtype == "Polygon":
-                  for ring in coordinates:
-                      add_polygon(ring, tags)
-              elif gtype == "MultiPolygon":
-                  for polygon in coordinates:
-                      for ring in polygon:
-                          add_polygon(ring, tags)
-
-          count = 0
-          for feature in land["features"]:
-              process_geometry(feature["geometry"], {"natural": "nosea"})
-              count += 1
-              if count % 1000 == 0:
-                  print(f"  Processed {count} land features...")
-
-          out.write('</osm>\n')
-          out.close()
-          print(f"Done: land.osm ({count} features)")
-          PY
-
-          echo "=== land.osm ==="
-          ls -lh data/world/land.osm
-
-      # ============================================
-      # 13 — Merge all OSM XML files into PBF using osmium
-      # ============================================
-      - name: Merge all files into one PBF
-        run: |
-          set -euo pipefail
-
-          # تحويل كل ملف OSM إلى PBF أولاً
           echo "Converting sea.osm to PBF..."
           osmium cat data/world/sea.osm -o data/world/sea.pbf --overwrite
 
@@ -374,12 +397,13 @@ jobs:
           ls -lh data/world/world_merged.pbf
 
       # ============================================
-      # 14 — Remove maritime boundaries (safety)
+      # 11 — Remove maritime boundaries + sort
       # ============================================
-      - name: Remove maritime boundaries
+      - name: Clean and sort data
         run: |
           set -euo pipefail
 
+          # إزالة الحدود البحرية احتياطياً
           osmium tags-filter \
             data/world/world_merged.pbf \
             'r/boundary=maritime' 'r/maritime=yes' \
@@ -387,7 +411,7 @@ jobs:
             -o data/world/world_clean.pbf \
             --overwrite
 
-          # إعادة ترتيب + حساب bbox
+          # ترتيب + حساب bbox
           osmium sort \
             data/world/world_clean.pbf \
             -o data/world/world_final.pbf \
@@ -398,7 +422,7 @@ jobs:
           ls -lh data/world/world_final.pbf
 
       # ============================================
-      # 15 — Generate world.map
+      # 12 — Generate world.map
       # ============================================
       - name: Generate world.map
         run: |
@@ -406,7 +430,7 @@ jobs:
 
           mkdir -p app/src/main/assets
 
-          # زيادة ذاكرة Java
+          # زيادة ذاكرة Java لأن بيانات العالم كبيرة
           export JAVACMD_OPTIONS="-Xmx4g"
 
           ./osmosis/bin/osmosis \
@@ -425,7 +449,7 @@ jobs:
           ls -lh app/src/main/assets/world.map
 
       # ============================================
-      # 16 — Verify world.map
+      # 13 — Verify world.map
       # ============================================
       - name: Verify world.map
         run: |
@@ -440,8 +464,6 @@ jobs:
 
           SIZE=$(stat -c%s "$FILE")
 
-          # ملف عالمي بمستوى تقريب 0-7 يجب أن يكون أكبر من 500KB
-          # الملف الرسمي من Mapsforge هو 3.1MB (فقط sea/land)
           if [ "$SIZE" -lt 512000 ]; then
             echo "WARNING: world.map is only $SIZE bytes (expected > 500KB)"
           fi
@@ -453,7 +475,7 @@ jobs:
           echo "======================================"
 
       # ============================================
-      # 17 — Commit world.map
+      # 14 — Commit world.map
       # ============================================
       - name: Commit world.map
         run: |
