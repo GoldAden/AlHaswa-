@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ============================================
-      #  2 — Java 21 (مطلوب لـ Osmosis + Mapsforge Writer)
+      #  2 — Java 21
       # ============================================
       - name: Setup Java 21
         uses: actions/setup-java@v4
@@ -25,7 +25,7 @@ jobs:
           java-version: '21'
 
       # ============================================
-      #  3 — Python 3.11 (مستقل عن نظام Ubuntu)
+      #  3 — Python 3.11
       # ============================================
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -34,29 +34,18 @@ jobs:
 
       # ============================================
       #  4 — تثبيت الأدوات
-      #   - osmosis من مستودع jammy لأنه حُذف من noble
-      #   - نستخدم python/pip من setup-python فقط
       # ============================================
       - name: Install tools
         run: |
-          # إضافة مستودع jammy مؤقتاً لتنزيل osmosis
           echo "deb http://archive.ubuntu.com/ubuntu jammy universe" | sudo tee /etc/apt/sources.list.d/jammy.list
-
           sudo apt-get update -qq
-
           sudo apt-get install -y wget unzip osmium-tool osmosis
-
-          # حذف مستودع jammy بعد التثبيت
           sudo rm -f /etc/apt/sources.list.d/jammy.list
-
-          # تثبيت pyshp في Python 3.11 فقط
           pip install pyshp
-
-          # التحقق
           echo "=== Verification ==="
           osmosis --version 2>&1 | head -3
           osmium --version
-          python -c "import shapefile; print('pyshp OK, path:', shapefile.__file__)"
+          python -c "import shapefile; print('pyshp OK')"
 
       # ============================================
       #  5 — تنزيل Natural Earth
@@ -64,31 +53,25 @@ jobs:
       - name: Download Natural Earth
         run: |
           mkdir -p data/natural-earth
-
           wget -O data/natural-earth/countries.zip \
             "https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_admin_0_countries.zip"
-
           wget -O data/natural-earth/coastline.zip \
             "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_coastline.zip"
-
           unzip -o data/natural-earth/countries.zip -d data/natural-earth/countries
           unzip -o data/natural-earth/coastline.zip -d data/natural-earth/coastline
 
       # ============================================
-      #  6 — تنزيل اليمن من Geofabrik
+      #  6 — تنزيل اليمن
       # ============================================
       - name: Download Yemen OSM
         run: |
           mkdir -p data/yemen
-
           wget -O data/yemen/yemen.osm.pbf \
             "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"
-
           ls -lh data/yemen/yemen.osm.pbf
 
       # ============================================
-      #  7 — تحويل حدود الدول إلى OSM
-      #    (boundary=administrative + admin_level=2 + name)
+      #  7 — تحويل حدود الدول (مع timestamp)
       # ============================================
       - name: Convert Natural Earth countries to OSM
         run: |
@@ -98,9 +81,9 @@ jobs:
 
           INPUT = "data/natural-earth/countries/ne_10m_admin_0_countries.shp"
           OUTPUT = "data/world-countries.osm"
+          TS = "2024-01-01T00:00:00Z"
 
           sf = shapefile.Reader(INPUT, encoding="utf-8")
-
           root = ET.Element("osm", {"version": "0.6", "generator": "AlHaswa-NaturalEarth"})
 
           next_node = -1
@@ -113,7 +96,6 @@ jobs:
               fields = sf.fields[1:]
               values = list(record)
               attrs = {fields[i][0]: values[i] for i in range(len(fields))}
-
               name = attrs.get("NAME") or attrs.get("ADMIN") or attrs.get("SOVEREIGNT") or "Unknown"
 
               points = shape.points
@@ -125,12 +107,22 @@ jobs:
                   if len(ring) < 3:
                       continue
 
-                  way = ET.SubElement(root, "way", {"id": str(next_way), "version": "1"})
+                  way = ET.SubElement(root, "way", {
+                      "id": str(next_way),
+                      "version": "1",
+                      "timestamp": TS
+                  })
                   next_way -= 1
 
                   node_ids = []
                   for lon, lat in ring:
-                      node = ET.SubElement(root, "node", {"id": str(next_node), "version": "1", "lat": str(lat), "lon": str(lon)})
+                      ET.SubElement(root, "node", {
+                          "id": str(next_node),
+                          "version": "1",
+                          "lat": str(lat),
+                          "lon": str(lon),
+                          "timestamp": TS
+                      })
                       node_ids.append(next_node)
                       next_node -= 1
 
@@ -152,8 +144,7 @@ jobs:
           ls -lh data/world-countries.osm
 
       # ============================================
-      #  8 — تحويل السواحل إلى OSM
-      #    (natural=coastline)
+      #  8 — تحويل السواحل (مع timestamp)
       # ============================================
       - name: Convert Natural Earth coastline to OSM
         run: |
@@ -163,9 +154,9 @@ jobs:
 
           INPUT = "data/natural-earth/coastline/ne_10m_coastline.shp"
           OUTPUT = "data/world-coastline.osm"
+          TS = "2024-01-01T00:00:00Z"
 
           sf = shapefile.Reader(INPUT)
-
           root = ET.Element("osm", {"version": "0.6", "generator": "AlHaswa-NaturalEarth"})
 
           next_node = -100000000
@@ -176,11 +167,21 @@ jobs:
               if len(points) < 2:
                   continue
 
-              way = ET.SubElement(root, "way", {"id": str(next_way), "version": "1"})
+              way = ET.SubElement(root, "way", {
+                  "id": str(next_way),
+                  "version": "1",
+                  "timestamp": TS
+              })
               next_way -= 1
 
               for lon, lat in points:
-                  node = ET.SubElement(root, "node", {"id": str(next_node), "version": "1", "lat": str(lat), "lon": str(lon)})
+                  ET.SubElement(root, "node", {
+                      "id": str(next_node),
+                      "version": "1",
+                      "lat": str(lat),
+                      "lon": str(lon),
+                      "timestamp": TS
+                  })
                   ET.SubElement(way, "nd", {"ref": str(next_node)})
                   next_node -= 1
 
@@ -265,33 +266,28 @@ jobs:
       - name: Verify map
         run: |
           FILE="app/src/main/assets/AlHaswa.map"
-
           if [ ! -s "$FILE" ]; then
             echo "ERROR: AlHaswa.map is missing or empty!"
             exit 1
           fi
-
           SIZE=$(stat -c%s "$FILE")
           if [ "$SIZE" -lt 50000 ]; then
             echo "ERROR: AlHaswa.map is only $SIZE bytes — too small!"
             exit 1
           fi
-
           echo "======================================"
           echo "AlHaswa.map created successfully"
           echo "Size: $(ls -lh $FILE | awk '{print $5}')"
           echo "======================================"
 
       # ============================================
-      #  15 — حفظ الخريطة في المستودع
+      #  15 — حفظ الخريطة
       # ============================================
       - name: Commit map
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-
           git add app/src/main/assets/AlHaswa.map
-
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
