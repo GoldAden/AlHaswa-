@@ -12,26 +12,15 @@ jobs:
 
     steps:
 
-      # =========================================================
-      # 1. تحميل المشروع
-      # =========================================================
       - name: Checkout
         uses: actions/checkout@v4
 
-
-      # =========================================================
-      # 2. Java
-      # =========================================================
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-
-      # =========================================================
-      # 3. الأدوات المطلوبة
-      # =========================================================
       - name: Install tools
         run: |
           set -euo pipefail
@@ -45,12 +34,6 @@ jobs:
             gdal-bin \
             python3
 
-          echo "Tools installed successfully."
-
-
-      # =========================================================
-      # 4. تحميل Osmosis
-      # =========================================================
       - name: Download Osmosis
         run: |
           set -euo pipefail
@@ -68,10 +51,6 @@ jobs:
           echo "Osmosis files:"
           find osmosis -maxdepth 4 -type f | head -100
 
-
-      # =========================================================
-      # 5. تحميل Mapsforge Map Writer 0.25.0
-      # =========================================================
       - name: Download Mapsforge Map Writer
         run: |
           set -euo pipefail
@@ -86,10 +65,6 @@ jobs:
 
           ls -lh writer/mapsforge-map-writer.jar
 
-
-      # =========================================================
-      # 6. تثبيت Mapsforge plugin
-      # =========================================================
       - name: Install Mapsforge plugin
         run: |
           set -euo pipefail
@@ -103,10 +78,6 @@ jobs:
 
           ls -lh "$HOME/.openstreetmap/osmosis/plugins/"
 
-
-      # =========================================================
-      # 7. تحميل Natural Earth
-      # =========================================================
       - name: Download Natural Earth data
         run: |
           set -euo pipefail
@@ -115,19 +86,13 @@ jobs:
           mkdir -p data/world
           mkdir -p app/src/main/assets
 
-          echo "Downloading land..."
-
           wget -q --show-progress \
             https://naturalearth.s3.amazonaws.com/110m_physical/ne_110m_land.zip \
             -O data/ne/land.zip
 
-          echo "Downloading countries..."
-
           wget -q --show-progress \
             https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip \
             -O data/ne/countries.zip
-
-          echo "Downloading cities..."
 
           wget -q --show-progress \
             https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_populated_places.zip \
@@ -141,16 +106,17 @@ jobs:
           mkdir -p data/ne/countries
           mkdir -p data/ne/cities
 
-          unzip -q data/ne/land.zip -d data/ne/land
-          unzip -q data/ne/countries.zip -d data/ne/countries
-          unzip -q data/ne/cities.zip -d data/ne/cities
+          unzip -q data/ne/land.zip \
+            -d data/ne/land
+
+          unzip -q data/ne/countries.zip \
+            -d data/ne/countries
+
+          unzip -q data/ne/cities.zip \
+            -d data/ne/cities
 
           echo "Natural Earth data downloaded."
 
-
-      # =========================================================
-      # 8. تحويل Natural Earth إلى GeoJSON
-      # =========================================================
       - name: Convert Natural Earth to GeoJSON
         run: |
           set -euo pipefail
@@ -176,10 +142,6 @@ jobs:
 
           ls -lh data/world/*.geojson
 
-
-      # =========================================================
-      # 9. إنشاء OSM XML
-      # =========================================================
       - name: Convert GeoJSON to OSM XML
         run: |
           set -euo pipefail
@@ -207,7 +169,6 @@ jobs:
           nodes = []
           ways = []
 
-
           def clean(value):
               if value is None:
                   return ""
@@ -216,7 +177,6 @@ jobs:
                   str(value),
                   quote=True
               )
-
 
           def add_node(lon, lat, tags=None):
               global node_id
@@ -240,6 +200,7 @@ jobs:
                   return None
 
               nid = node_id
+
               node_id += 1
 
               nodes.append(
@@ -252,7 +213,6 @@ jobs:
               )
 
               return nid
-
 
           def add_polygon(coords, tags):
               global way_id
@@ -270,7 +230,10 @@ jobs:
                   lon = point[0]
                   lat = point[1]
 
-                  nid = add_node(lon, lat)
+                  nid = add_node(
+                      lon,
+                      lat
+                  )
 
                   if nid is not None:
                       refs.append(nid)
@@ -282,6 +245,7 @@ jobs:
                   refs.append(refs[0])
 
               wid = way_id
+
               way_id -= 1
 
               ways.append(
@@ -292,13 +256,16 @@ jobs:
                   )
               )
 
-
           def process_geometry(geometry, tags):
+
               if not geometry:
                   return
 
               gtype = geometry.get("type")
-              coordinates = geometry.get("coordinates")
+
+              coordinates = geometry.get(
+                  "coordinates"
+              )
 
               if not coordinates:
                   return
@@ -306,7 +273,6 @@ jobs:
               if gtype == "Polygon":
 
                   for ring in coordinates:
-
                       add_polygon(
                           ring,
                           tags
@@ -317,18 +283,19 @@ jobs:
                   for polygon in coordinates:
 
                       for ring in polygon:
-
                           add_polygon(
                               ring,
                               tags
                           )
 
+          # ==========================================
+          # LAND
+          # ==========================================
 
-          # =====================================================
-          # اليابسة
-          # =====================================================
-
-          for feature in land.get("features", []):
+          for feature in land.get(
+              "features",
+              []
+          ):
 
               process_geometry(
                   feature.get("geometry"),
@@ -337,12 +304,14 @@ jobs:
                   }
               )
 
+          # ==========================================
+          # COUNTRIES + BORDERS + COUNTRY LABELS
+          # ==========================================
 
-          # =====================================================
-          # حدود الدول
-          # =====================================================
-
-          for feature in countries.get("features", []):
+          for feature in countries.get(
+              "features",
+              []
+          ):
 
               properties = feature.get(
                   "properties",
@@ -369,9 +338,13 @@ jobs:
                   tags
               )
 
-              # نقطة اسم الدولة
-              lon = properties.get("LABEL_X")
-              lat = properties.get("LABEL_Y")
+              lon = properties.get(
+                  "LABEL_X"
+              )
+
+              lat = properties.get(
+                  "LABEL_Y"
+              )
 
               if lon is not None and lat is not None:
 
@@ -384,12 +357,14 @@ jobs:
                       }
                   )
 
+          # ==========================================
+          # CITIES
+          # ==========================================
 
-          # =====================================================
-          # المدن
-          # =====================================================
-
-          for feature in cities.get("features", []):
+          for feature in cities.get(
+              "features",
+              []
+          ):
 
               properties = feature.get(
                   "properties",
@@ -402,12 +377,16 @@ jobs:
                   or ""
               )
 
-              geometry = feature.get("geometry")
+              geometry = feature.get(
+                  "geometry"
+              )
 
               if not geometry:
                   continue
 
-              if geometry.get("type") != "Point":
+              if geometry.get(
+                  "type"
+              ) != "Point":
                   continue
 
               coordinates = geometry.get(
@@ -429,10 +408,9 @@ jobs:
                   }
               )
 
-
-          # =====================================================
-          # كتابة OSM XML
-          # =====================================================
+          # ==========================================
+          # WRITE OSM XML
+          # ==========================================
 
           with open(
               "data/world/world.osm",
@@ -448,6 +426,8 @@ jobs:
                   '<osm version="0.6" generator="AlHaswa">\n'
               )
 
+              # Nodes
+
               for nid, lat, lon, tags in nodes:
 
                   out.write(
@@ -462,7 +442,8 @@ jobs:
                           continue
 
                       out.write(
-                          f'    <tag k="{clean(key)}" '
+                          f'    <tag '
+                          f'k="{clean(key)}" '
                           f'v="{clean(value)}"/>\n'
                       )
 
@@ -470,6 +451,7 @@ jobs:
                       '  </node>\n'
                   )
 
+              # Ways
 
               for wid, refs, tags in ways:
 
@@ -489,7 +471,8 @@ jobs:
                           continue
 
                       out.write(
-                          f'    <tag k="{clean(key)}" '
+                          f'    <tag '
+                          f'k="{clean(key)}" '
                           f'v="{clean(value)}"/>\n'
                       )
 
@@ -497,18 +480,28 @@ jobs:
                       '  </way>\n'
                   )
 
-
               out.write(
                   '</osm>\n'
               )
 
-
           print()
-          print("================================")
-          print("World OSM generation completed")
-          print("Nodes:", len(nodes))
-          print("Ways :", len(ways))
-          print("================================")
+          print(
+              "================================"
+          )
+          print(
+              "World OSM generation completed"
+          )
+          print(
+              "Nodes:",
+              len(nodes)
+          )
+          print(
+              "Ways :",
+              len(ways)
+          )
+          print(
+              "================================"
+          )
 
           PY
 
@@ -516,10 +509,6 @@ jobs:
 
           ls -lh data/world/world.osm
 
-
-      # =========================================================
-      # 10. تحويل OSM XML إلى PBF
-      # =========================================================
       - name: Convert OSM XML to PBF
         run: |
           set -euo pipefail
@@ -533,10 +522,6 @@ jobs:
 
           ls -lh data/world/world-unsorted.osm.pbf
 
-
-      # =========================================================
-      # 11. ترتيب PBF
-      # =========================================================
       - name: Sort PBF
         run: |
           set -euo pipefail
@@ -557,26 +542,25 @@ jobs:
           osmium fileinfo \
             data/world/world.osm.pbf
 
-
-      # =========================================================
-      # 12. العثور على Osmosis
-      # =========================================================
       - name: Find Osmosis
         run: |
           set -euo pipefail
 
           echo "Searching for Osmosis executable..."
 
-          OSMOSIS_BIN=$(find osmosis \
-            -type f \
-            -name "osmosis" \
-            | head -n 1)
+          OSMOSIS_BIN=$(
+            find osmosis \
+              -type f \
+              -name "osmosis" \
+              | head -n 1
+          )
 
           if [ -z "$OSMOSIS_BIN" ]; then
 
             echo "ERROR: Osmosis executable not found."
 
             echo ""
+
             echo "Files inside osmosis:"
 
             find osmosis \
@@ -585,29 +569,32 @@ jobs:
               | head -200
 
             exit 1
+
           fi
 
           echo "Osmosis found at:"
+
           echo "$OSMOSIS_BIN"
 
           chmod +x "$OSMOSIS_BIN"
 
-          echo "OSMOSIS_BIN=$OSMOSIS_BIN" \
+          echo \
+            "OSMOSIS_BIN=$OSMOSIS_BIN" \
             >> "$GITHUB_ENV"
 
-
-      # =========================================================
-      # 13. تثبيت Plugin بجانب Osmosis
-      # =========================================================
       - name: Install plugin beside Osmosis
         run: |
           set -euo pipefail
 
-          OSMOSIS_DIR=$(dirname "$OSMOSIS_BIN")
+          OSMOSIS_DIR=$(
+            dirname "$OSMOSIS_BIN"
+          )
 
-          mkdir -p "$OSMOSIS_DIR/plugins"
+          mkdir -p \
+            "$OSMOSIS_DIR/plugins"
 
-          cp writer/mapsforge-map-writer.jar \
+          cp \
+            writer/mapsforge-map-writer.jar \
             "$OSMOSIS_DIR/plugins/"
 
           echo "Plugin installed at:"
@@ -615,10 +602,6 @@ jobs:
           ls -lh \
             "$OSMOSIS_DIR/plugins/"
 
-
-      # =========================================================
-      # 14. إنشاء world.map
-      # =========================================================
       - name: Generate world.map
         run: |
           set -euo pipefail
@@ -626,9 +609,11 @@ jobs:
           echo "Starting Mapsforge map generation..."
 
           echo "Using Osmosis:"
+
           echo "$OSMOSIS_BIN"
 
-          rm -f app/src/main/assets/world.map
+          rm -f \
+            app/src/main/assets/world.map
 
           "$OSMOSIS_BIN" \
             --read-pbf \
@@ -636,24 +621,23 @@ jobs:
             --mapfile-writer \
             file=app/src/main/assets/world.map \
             type=ram \
-            zoom-interval=0,0,7 \
             map-start-position=15.0,48.0 \
             map-start-zoom=2
 
-          test -s app/src/main/assets/world.map
+          test -s \
+            app/src/main/assets/world.map
 
           echo ""
+
           echo "================================"
+
           echo "world.map generated successfully"
+
           echo "================================"
 
           ls -lh \
             app/src/main/assets/world.map
 
-
-      # =========================================================
-      # 15. التحقق النهائي
-      # =========================================================
       - name: Verify world.map
         run: |
           set -euo pipefail
@@ -668,34 +652,37 @@ jobs:
 
           fi
 
-          SIZE=$(stat -c%s "$FILE")
+          SIZE=$(
+            stat -c%s "$FILE"
+          )
 
           echo "world.map size:"
+
           echo "$SIZE bytes"
 
           if [ "$SIZE" -lt 51200 ]; then
 
-            echo "ERROR: world.map is smaller than 50 KB."
+            echo \
+              "ERROR: world.map is smaller than 50 KB."
 
             exit 1
 
           fi
 
           echo ""
+
           echo "world.map verification passed."
 
-
-      # =========================================================
-      # 16. رفع world.map إلى المستودع
-      # =========================================================
       - name: Commit world.map
         run: |
           set -euo pipefail
 
-          git config user.name \
+          git config \
+            user.name \
             "github-actions[bot]"
 
-          git config user.email \
+          git config \
+            user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add \
@@ -714,10 +701,6 @@ jobs:
 
           fi
 
-
-      # =========================================================
-      # 17. Artifact احتياطي
-      # =========================================================
       - name: Upload world.map artifact
         uses: actions/upload-artifact@v4
         with:
