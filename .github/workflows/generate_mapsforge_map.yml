@@ -1,137 +1,158 @@
 name: Generate AlHaswa Mapsforge Map
-
 on:
   workflow_dispatch:
 
 jobs:
   build-map:
     runs-on: ubuntu-latest
-
     steps:
+    # ============================================
+    #  1 — Checkout
+    # ============================================
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      # ============================================
-      #  1 — Checkout
-      # ============================================
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    # ============================================
+    #  2 — Java 21
+    # ============================================
+    - name: Setup Java 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
 
-      # ============================================
-      #  2 — Java 21
-      # ============================================
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
+    # ============================================
+    #  3 — Install tools
+    #    osmium-tool from apt (for filtering)
+    #    osmosis from ZIP (for Mapsforge plugin)
+    # ============================================
+    - name: Install tools
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y wget unzip osmium-tool
 
-      # ============================================
-      #  3 — تثبيت الأدوات
-      #   osmium-tool من apt (للتصفية)
-      #   osmosis من tarball (لـ Mapsforge plugin)
-      # ============================================
-      - name: Install tools
-        run: |
-          # osmium فقط من apt
-          sudo apt-get update -qq
-          sudo apt-get install -y wget unzip osmium-tool
+        # Download Osmosis portable ZIP
+        wget -O osmosis.zip \
+          "https://github.com/openstreetmap/osmosis/releases/download/0.49.2/osmosis-0.49.2.zip"
+        unzip osmosis.zip
+        # Extraction creates: osmosis-0.49.2/bin  osmosis-0.49.2/lib
+        # Rename for convenience
+        mv osmosis-0.49.2 osmosis
 
-          # تنزيل Osmosis محمول (لا يحتاج apt)
-          wget -O osmosis.tgz \
-            "https://github.com/openstreetmap/osmosis/releases/download/0.49.2/osmosis-0.49.2.tgz"
-          tar xzf osmosis.tgz
+        # Verify
+        ./osmosis/bin/osmosis --version 2>&1 | head -3
+        osmium --version
 
-          # التحقق
-          echo "=== Verification ==="
-          ./osmosis/bin/osmosis --version 2>&1 | head -3
-          osmium --version
+    # ============================================
+    #  4 — Download Yemen OSM data
+    # ============================================
+    - name: Download Yemen OSM
+      run: |
+        mkdir -p data/yemen
+        wget -O data/yemen/yemen.osm.pbf \
+          "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"
+        ls -lh data/yemen/yemen.osm.pbf
 
-      # ============================================
-      #  4 — تنزيل بيانات اليمن
-      # ============================================
-      - name: Download Yemen OSM
-        run: |
-          mkdir -p data/yemen
-          wget -O data/yemen/yemen.osm.pbf \
-            "https://download.geofabrik.de/asia/yemen-latest.osm.pbf"
-          ls -lh data/yemen/yemen.osm.pbf
+    # ============================================
+    #  5 — Remove boundary=maritime
+    # ============================================
+    - name: Remove maritime boundaries
+      run: |
+        osmium tags-filter \
+          data/yemen/yemen.osm.pbf \
+          'r/boundary=maritime' \
+          --invert-match \
+          -o data/yemen/yemen-clean.pbf \
+          --overwrite
+        ls -lh data/yemen/yemen-clean.pbf
 
-      # ============================================
-      #  5 — حذف boundary=maritime
-      # ============================================
-      - name: Remove maritime boundaries
-        run: |
-          osmium tags-filter \
-            data/yemen/yemen.osm.pbf \
-            'r/boundary=maritime' \
-            --invert-match \
-            -o data/yemen/yemen-clean.pbf \
-            --overwrite
-          ls -lh data/yemen/yemen-clean.pbf
+    # ============================================
+    #  6 — Mapsforge Map Writer plugin
+    #
+    #    FIX: Osmosis uses JPF (Java Plugin Framework)
+    #    for plugin discovery. Simply placing the JAR
+    #    in osmosis/lib/ adds it to the CLASSPATH but
+    #    does NOT register it as a JPF plugin.
+    #
+    #    JPF scans these directories for plugin JARs
+    #    that contain a plugin.xml descriptor:
+    #      - ~/.openstreetmap/osmosis/plugins/
+    #      - <osmosis_home>/bin/plugins/
+    #
+    #    The previous workflow only copied to
+    #    osmosis/lib/ — causing exit code 8
+    #    ("Task type map-writer doesn't exist").
+    #
+    #    Now we create the plugins directory and
+    #    copy the JAR there so JPF can find it.
+    # ============================================
+    - name: Download Mapsforge Map Writer
+      run: |
+        wget -O mapsforge-map-writer.jar \
+          "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
+        ls -lh mapsforge-map-writer.jar
 
-      # ============================================
-      #  6 — Mapsforge Map Writer 0.25.0
-      #   نسخ الـ plugin داخل مجلد lib الخاص
-      #   بالنسخة المحمولة من osmosis
-      # ============================================
-      - name: Download Mapsforge Map Writer
-        run: |
-          wget -O mapsforge-map-writer.jar \
-            "https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar"
-          ls -lh mapsforge-map-writer.jar
+    - name: Install Mapsforge plugin
+      run: |
+        # --- FIX: Create the JPF plugin directory ---
+        mkdir -p ~/.openstreetmap/osmosis/plugins
 
-      - name: Install Mapsforge plugin
-        run: |
-          cp mapsforge-map-writer.jar osmosis/lib/
-          ls osmosis/lib/*.jar
+        # Copy the plugin JAR where JPF will discover it
+        cp mapsforge-map-writer.jar ~/.openstreetmap/osmosis/plugins/
 
-      # ============================================
-      #  7 — إنشاء AlHaswa.map
-      # ============================================
-      - name: Generate AlHaswa.map
-        run: |
-          mkdir -p app/src/main/assets
+        echo "=== Plugin installed ==="
+        ls -la ~/.openstreetmap/osmosis/plugins/
 
-          ./osmosis/bin/osmosis \
-            --read-pbf file=data/yemen/yemen-clean.pbf \
-            --map-writer \
+    # ============================================
+    #  7 — Generate AlHaswa.map
+    #
+    #    FIX: The Mapsforge plugin registers the task
+    #    as "mapfile-writer" (not "map-writer").
+    #    Short form: --mw
+    # ============================================
+    - name: Generate AlHaswa.map
+      run: |
+        mkdir -p app/src/main/assets
+        ./osmosis/bin/osmosis \
+          --read-pbf file=data/yemen/yemen-clean.pbf \
+          --mapfile-writer \
             file=app/src/main/assets/AlHaswa.map \
             type=ram \
             map-start-position=15.3694,44.1910 \
             map-start-zoom=6
+        ls -lh app/src/main/assets/AlHaswa.map
 
-          ls -lh app/src/main/assets/AlHaswa.map
+    # ============================================
+    #  8 — Verify
+    # ============================================
+    - name: Verify map
+      run: |
+        FILE="app/src/main/assets/AlHaswa.map"
+        if [ ! -s "$FILE" ]; then
+          echo "ERROR: AlHaswa.map is missing or empty!"
+          exit 1
+        fi
+        SIZE=$(stat -c%s "$FILE")
+        if [ "$SIZE" -lt 50000 ]; then
+          echo "ERROR: AlHaswa.map is only $SIZE bytes — too small!"
+          exit 1
+        fi
+        echo "======================================"
+        echo "✅ AlHaswa.map created successfully"
+        echo "Size: $(ls -lh $FILE | awk '{print $5}')"
+        echo "======================================"
 
-      # ============================================
-      #  8 — التحقق
-      # ============================================
-      - name: Verify map
-        run: |
-          FILE="app/src/main/assets/AlHaswa.map"
-          if [ ! -s "$FILE" ]; then
-            echo "ERROR: AlHaswa.map is missing or empty!"
-            exit 1
-          fi
-          SIZE=$(stat -c%s "$FILE")
-          if [ "$SIZE" -lt 50000 ]; then
-            echo "ERROR: AlHaswa.map is only $SIZE bytes — too small!"
-            exit 1
-          fi
-          echo "======================================"
-          echo "✅ AlHaswa.map created successfully"
-          echo "Size: $(ls -lh $FILE | awk '{print $5}')"
-          echo "======================================"
-
-      # ============================================
-      #  9 — حفظ الخريطة
-      # ============================================
-      - name: Commit map
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git add app/src/main/assets/AlHaswa.map
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "chore: generate unified AlHaswa map [skip ci]"
-            git push
-          fi
+    # ============================================
+    #  9 — Commit map
+    # ============================================
+    - name: Commit map
+      run: |
+        git config user.name "GitHub Actions Bot"
+        git config user.email "actions@github.com"
+        git add app/src/main/assets/AlHaswa.map
+        if git diff --cached --quiet; then
+          echo "No changes to commit."
+        else
+          git commit -m "chore: generate unified AlHaswa map [skip ci]"
+          git push
+        fi
