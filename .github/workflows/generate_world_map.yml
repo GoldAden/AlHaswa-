@@ -1,0 +1,163 @@
+name: Generate World Mapsforge Map
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-world-map:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y wget unzip osmium-tool
+
+      - name: Download Osmosis
+        run: |
+          set -euo pipefail
+
+          wget -q --show-progress \
+            https://github.com/openstreetmap/osmosis/releases/download/0.49.2/osmosis-0.49.2.zip \
+            -O osmosis.zip
+
+          test -s osmosis.zip
+
+          unzip -q osmosis.zip -d osmosis
+
+      - name: Download Mapsforge Map Writer
+        run: |
+          set -euo pipefail
+
+          mkdir -p writer
+
+          wget -q --show-progress \
+            https://repo1.maven.org/maven2/org/mapsforge/mapsforge-map-writer/0.25.0/mapsforge-map-writer-0.25.0-jar-with-dependencies.jar \
+            -O writer/mapsforge-map-writer.jar
+
+          test -s writer/mapsforge-map-writer.jar
+
+      - name: Install Mapsforge plugin
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$HOME/.openstreetmap/osmosis/plugins"
+          mkdir -p osmosis/bin/plugins
+
+          cp writer/mapsforge-map-writer.jar \
+            "$HOME/.openstreetmap/osmosis/plugins/"
+
+          cp writer/mapsforge-map-writer.jar \
+            osmosis/bin/plugins/
+
+      - name: Download World OSM data
+        run: |
+          set -euo pipefail
+
+          mkdir -p data/world
+          mkdir -p app/src/main/assets
+
+          wget -q --show-progress \
+            https://github.com/nrenner/weltkarte/raw/master/weltkarte.osm.pbf \
+            -O data/world/world-base.osm.pbf
+
+          test -s data/world/world-base.osm.pbf
+
+          echo "World source size:"
+          ls -lh data/world/world-base.osm.pbf
+
+      - name: Validate and sort PBF
+        run: |
+          set -euo pipefail
+
+          echo "Checking PBF..."
+          osmium fileinfo data/world/world-base.osm.pbf
+
+          echo "Sorting PBF to prevent out-of-order object errors..."
+
+          osmium sort \
+            data/world/world-base.osm.pbf \
+            -o data/world/world-sorted.osm.pbf \
+            --overwrite
+
+          test -s data/world/world-sorted.osm.pbf
+
+          echo "Sorted PBF:"
+          ls -lh data/world/world-sorted.osm.pbf
+
+      - name: Remove old world map
+        run: |
+          rm -f app/src/main/assets/world.map
+
+      - name: Generate world.map
+        run: |
+          set -euo pipefail
+
+          chmod +x osmosis/bin/osmosis
+
+          osmosis/bin/osmosis \
+            --read-pbf file=data/world/world-sorted.osm.pbf \
+            --mapfile-writer \
+            file=app/src/main/assets/world.map \
+            type=ram \
+            zoom-interval=0,0,7 \
+            map-start-position=15,48 \
+            map-start-zoom=2
+
+          test -s app/src/main/assets/world.map
+
+          SIZE=$(stat -c%s app/src/main/assets/world.map)
+
+          echo "world.map size: $SIZE bytes"
+
+          if [ "$SIZE" -lt 50000 ]; then
+            echo "ERROR: world.map is too small."
+            exit 1
+          fi
+
+      - name: Verify world.map
+        run: |
+          set -euo pipefail
+
+          echo "Generated file:"
+          ls -lh app/src/main/assets/world.map
+
+          file app/src/main/assets/world.map
+
+          test -s app/src/main/assets/world.map
+
+      - name: Commit world.map
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add app/src/main/assets/world.map
+
+          if git diff --cached --quiet; then
+            echo "world.map has no changes."
+          else
+            git commit -m "Add world Mapsforge map"
+            git push
+          fi
+
+      - name: Upload world.map artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: world-map
+          path: app/src/main/assets/world.map
+          if-no-files-found: error
