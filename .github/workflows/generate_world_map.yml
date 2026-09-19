@@ -42,7 +42,15 @@ jobs:
 
           test -s osmosis.zip
 
-          unzip -q osmosis.zip -d osmosis
+          # فك الضغط — الهيكل يُنتج مجلد osmosis-0.49.2/bin/osmosis
+          unzip -q osmosis.zip -d osmosis-dir
+
+          # أعِد التسمية لسهولة الاستخدام
+          mv osmosis-dir/osmosis-0.49.2 osmosis
+
+          # تأكد أن السكربت موجود
+          ls -la osmosis/bin/osmosis
+          test -x osmosis/bin/osmosis || true
 
       - name: Download Mapsforge Map Writer
         run: |
@@ -60,14 +68,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          # إنشاء مجلد plugins داخل Osmosis
           mkdir -p "$HOME/.openstreetmap/osmosis/plugins"
+          mkdir -p osmosis/lib/plugins
           mkdir -p osmosis/bin/plugins
 
+          # نسخ الـ plugin — نضعه في كل المجلدات المحتملة
           cp writer/mapsforge-map-writer.jar \
             "$HOME/.openstreetmap/osmosis/plugins/"
-
-          cp writer/mapsforge-map-writer.jar \
-            osmosis/bin/plugins/
+          cp writer/mapsforge-map-writer.jar osmosis/lib/plugins/
+          cp writer/mapsforge-map-writer.jar osmosis/bin/plugins/
 
       - name: Download Natural Earth data
         run: |
@@ -277,8 +287,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          # تأكد أن سكربت Osmosis قابل للتنفيذ
           chmod +x osmosis/bin/osmosis
 
+          # شغّل Osmosis
           osmosis/bin/osmosis \
             --read-pbf file=data/world/world-clean.osm.pbf \
             --mapfile-writer \
