@@ -23,6 +23,7 @@ jobs:
       - name: Install tools
         run: |
           set -euo pipefail
+
           sudo apt-get update
           sudo apt-get install -y wget unzip osmium-tool
 
@@ -70,13 +71,15 @@ jobs:
           mkdir -p data/world
           mkdir -p app/src/main/assets
 
-          wget -q --show-progress \
-            https://github.com/nrenner/weltkarte/raw/master/weltkarte.osm.pbf \
+          echo "Downloading world OSM data..."
+
+          wget -S --show-progress \
+            "https://raw.githubusercontent.com/nrenner/weltkarte/master/weltkarte.osm.pbf" \
             -O data/world/world-base.osm.pbf
 
           test -s data/world/world-base.osm.pbf
 
-          echo "World source size:"
+          echo "World source downloaded successfully:"
           ls -lh data/world/world-base.osm.pbf
 
       - name: Validate and sort PBF
@@ -84,9 +87,11 @@ jobs:
           set -euo pipefail
 
           echo "Checking PBF..."
-          osmium fileinfo data/world/world-base.osm.pbf
 
-          echo "Sorting PBF to prevent out-of-order object errors..."
+          osmium fileinfo \
+            data/world/world-base.osm.pbf
+
+          echo "Sorting PBF..."
 
           osmium sort \
             data/world/world-base.osm.pbf \
@@ -98,15 +103,15 @@ jobs:
           echo "Sorted PBF:"
           ls -lh data/world/world-sorted.osm.pbf
 
-      - name: Remove old world map
-        run: |
-          rm -f app/src/main/assets/world.map
-
       - name: Generate world.map
         run: |
           set -euo pipefail
 
+          rm -f app/src/main/assets/world.map
+
           chmod +x osmosis/bin/osmosis
+
+          echo "Generating Mapsforge world.map..."
 
           osmosis/bin/osmosis \
             --read-pbf file=data/world/world-sorted.osm.pbf \
@@ -132,7 +137,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "Generated file:"
+          echo "Final world.map:"
+
           ls -lh app/src/main/assets/world.map
 
           file app/src/main/assets/world.map
@@ -149,13 +155,13 @@ jobs:
           git add app/src/main/assets/world.map
 
           if git diff --cached --quiet; then
-            echo "world.map has no changes."
+            echo "No changes."
           else
             git commit -m "Add world Mapsforge map"
             git push
           fi
 
-      - name: Upload world.map artifact
+      - name: Upload world.map
         uses: actions/upload-artifact@v4
         with:
           name: world-map
